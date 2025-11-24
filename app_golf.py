@@ -7,7 +7,7 @@ from matplotlib.patches import Ellipse, Circle
 import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 19.0 Deep Data", layout="wide")
+st.set_page_config(page_title="Golf Deep Data", layout="wide")
 
 # --- CSS ---
 st.markdown("""
