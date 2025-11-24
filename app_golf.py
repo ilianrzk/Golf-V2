@@ -1,14 +1,18 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.patches import Ellipse, Circle
+import datetime
 import sqlite3
 from fpdf import FPDF
-import datetime
+import io
 import plotly.express as px
 import plotly.graph_objects as go
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 39.1 High Vis", layout="wide")
+st.set_page_config(page_title="GolfShot 40.0 Split DNA", layout="wide")
 
 # --- CSS ---
 st.markdown("""
@@ -97,7 +101,7 @@ def get_course_pars(name):
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 16)
-        self.cell(0, 10, 'GolfShot Analytics - V39', 0, 1, 'C')
+        self.cell(0, 10, 'GolfShot Analytics - V40', 0, 1, 'C')
         self.ln(10)
     def chapter_title(self, label):
         self.set_font('Arial', 'B', 12)
@@ -190,7 +194,7 @@ with st.sidebar.expander("Assistant", expanded=True):
                 st.markdown(f"<div class='caddie-box'>💡 {rec['club']}<br><small>{rec['distance']:.1f}m</small></div>", unsafe_allow_html=True)
 
 st.sidebar.markdown("---")
-if st.sidebar.button("Injecter Données V39"):
+if st.sidebar.button("Injecter Données V40"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(60)]
     for _ in range(200):
@@ -218,70 +222,38 @@ if st.sidebar.button("Injecter Données V39"):
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Backup CSV", convert_df(df_ex), "golf_v39_backup.csv", "text/csv")
+    st.sidebar.download_button("📥 Backup CSV", convert_df(df_ex), "golf_v40_backup.csv", "text/csv")
 
 if st.sidebar.button("⚠️ Vider DB"):
     conn.execute("DELETE FROM coups"); conn.execute("DELETE FROM parties"); conn.commit()
     st.session_state['coups'] = []; st.rerun()
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 39.1 : High Visiblity")
+st.title("🏌️‍♂️ GolfShot 40.0 : Split DNA")
 
 tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt, tab_sg = st.tabs([
     "⛳ Parcours", "🚜 Practice", "🏆 Combine", "🧬 Club DNA", "🎒 Mapping", "🟢 Putting", "📊 Strokes Gained"
 ])
 
-# --- HELPER PLOTLY AMÉLIORÉ ---
+# HELPER PLOTLY
 def plotly_scatter_pro(data, title, show_target=True):
-    """Génère un scatter plot Plotly haute visibilité"""
-    # Palette Pro
     color_map = {'Practice': '#2196F3', 'Parcours': '#D32F2F', 'Combine': '#FF9800'}
-    
-    fig = px.scatter(
-        data, 
-        x='lat_viz', 
-        y='distance', 
-        color='mode',
-        symbol='contact',
-        color_discrete_map=color_map,
-        hover_data=['date', 'lie', 'strat_type', 'err_longueur'],
-        title=title
-    )
-    
-    # Style des points (Gros et Bordés)
+    fig = px.scatter(data, x='lat_viz', y='distance', color='mode', symbol='contact',
+                     color_discrete_map=color_map, hover_data=['date', 'lie', 'strat_type'], title=title)
     fig.update_traces(marker=dict(size=14, line=dict(width=2, color='white'), opacity=0.8))
-    
-    # Cible
     if show_target and 'strat_dist' in data.columns:
         target = data['strat_dist'].mean()
         if target > 0:
-            # Ligne horizontale verte pointillée
-            fig.add_hline(y=target, line_dash="dot", line_color="green", line_width=3, annotation_text="CIBLE")
-            # Ligne verticale (Centre)
-            fig.add_vline(x=0, line_dash="dot", line_color="gray", line_width=2)
-
-    # Layout Pro (Fond blanc, Grille légère)
-    fig.update_layout(
-        xaxis_title="← Gauche (m)  |  Droite (m) →",
-        yaxis_title="Distance (m)",
-        template="plotly_white", # Fond blanc propre
-        font=dict(size=14),      # Texte plus grand
-        legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1
-        )
-    )
+            fig.add_hline(y=target, line_dash="dot", line_color="green", annotation_text="CIBLE")
+            fig.add_vline(x=0, line_dash="dot", line_color="gray")
+    fig.update_layout(xaxis_title="← Gauche (m) | Droite (m) →", yaxis_title="Distance (m)", template="plotly_white", font=dict(size=14))
     return fig
 
 # ==================================================
 # ONGLET 1 : PARCOURS + GESTION PARCOURS
 # ==================================================
 with tab_parcours:
-    
-    with st.expander("🗺️ Gestion des Parcours (Base de Données)"):
+    with st.expander("🗺️ Gestion des Parcours"):
         c_load, c_new = st.columns(2)
         with c_load:
             courses_avail = get_courses_list()
@@ -308,7 +280,6 @@ with tab_parcours:
                 except: st.error("Format invalide.")
 
     st.markdown("---")
-    
     c1, c2 = st.columns([1, 1])
     with c1:
         idx = st.session_state['current_hole'] - 1
@@ -450,7 +421,7 @@ with tab_combine:
             st.metric("Moyenne", f"{df_c['points_test'].mean():.0f}/100")
 
 # ==================================================
-# ONGLET 4 : CLUB DNA (INTERACTIF)
+# ONGLET 4 : CLUB DNA (SPLIT)
 # ==================================================
 with tab_dna:
     st.header("🧬 Club DNA")
@@ -460,16 +431,29 @@ with tab_dna:
             sel = st.selectbox("Club", df_l['club'].unique())
             sub = df_l[df_l['club'] == sel]
             
-            # Calcul X pour visualisation
-            # On simule une dispersion en mètres basée sur le score 0-5
+            # Simulation X pour visualisation
             sub['lat_viz'] = sub.apply(lambda r: (r['score_lateral']*5 if r['direction']=='Droite' else -r['score_lateral']*5) + np.random.normal(0,1), axis=1)
             
-            # Plotly Chart
-            st.plotly_chart(plotly_scatter_pro(sub, f"Dispersion : {sel}"), use_container_width=True)
+            # 1. ONGLETS INTERNES POUR SEPARER
+            tab_prac, tab_parc = st.tabs(["🚜 Practice (Labo)", "⛳ Parcours (Réalité)"])
             
-            c1, c2 = st.columns(2)
-            c1.metric("Dispersion Prof.", f"± {sub['distance'].std():.1f}m")
-            c2.metric("Dispersion Lat.", f"{sub['score_lateral'].mean():.1f}/5")
+            with tab_prac:
+                sub_p = sub[sub['mode'] == 'Practice']
+                if not sub_p.empty:
+                    st.plotly_chart(plotly_scatter_pro(sub_p, f"Dispersion Practice : {sel}"), use_container_width=True)
+                    c1, c2 = st.columns(2)
+                    c1.metric("Moyenne", f"{sub_p['distance'].mean():.1f}m")
+                    c2.metric("Dispersion", f"± {sub_p['distance'].std():.1f}m")
+                else: st.info("Pas de données Practice")
+
+            with tab_parc:
+                sub_r = sub[sub['mode'] == 'Parcours']
+                if not sub_r.empty:
+                    st.plotly_chart(plotly_scatter_pro(sub_r, f"Dispersion Parcours : {sel}"), use_container_width=True)
+                    c1, c2 = st.columns(2)
+                    c1.metric("Moyenne", f"{sub_r['distance'].mean():.1f}m")
+                    c2.metric("Dispersion", f"± {sub_r['distance'].std():.1f}m")
+                else: st.info("Pas de données Parcours")
             
             st.subheader("Effets")
             df_eff = sub[sub['strat_effet'].isin(["Fade", "Draw"])]
@@ -504,7 +488,6 @@ with tab_putt:
     if not df_analysis.empty:
         df_p = df_analysis[df_analysis['type_coup'] == 'Putt'].copy()
         if not df_p.empty:
-            # Coordonnées
             def get_pc(r):
                 res = r['resultat_putt']
                 if "Dans" in res: return 0,0
@@ -518,16 +501,16 @@ with tab_putt:
             coords = df_p.apply(get_pc, axis=1, result_type='expand')
             df_p['x'] = coords[0]; df_p['y'] = coords[1]
             
-            c1, c2 = st.columns(2)
-            with c1:
-                fig = px.scatter(df_p, x='x', y='y', color='resultat_putt', title="Boussole Interactive")
+            col1, col2 = st.columns(2)
+            with col1:
+                fig = px.scatter(df_p, x='x', y='y', color='resultat_putt', title="Boussole")
                 fig.update_layout(template="plotly_white")
                 st.plotly_chart(fig, use_container_width=True)
             
-            with c2:
+            with col2:
                 df_p['Zone'] = pd.cut(df_p['strat_dist'], [0,2,5,10,30], labels=["0-2m","2-5m","5-10m","+10m"])
                 piv = df_p.groupby('Zone', observed=False).apply(lambda x: (x['resultat_putt']=="Dans le trou").mean()*100)
-                st.dataframe(piv.to_frame("%").style.background_gradient(cmap="RdYlGn"), use_container_width=True)
+                st.dataframe(piv.to_frame("% Réussite").style.background_gradient(cmap="RdYlGn"), use_container_width=True)
 
 # ==================================================
 # ONGLET 7 : STROKES GAINED
@@ -535,8 +518,6 @@ with tab_putt:
 with tab_sg:
     st.header("📊 Strokes Gained")
     if not df_analysis.empty:
-        # SG PUTTING
-        ref_putts = {1.5: 1.9, 3: 2.1, 6: 2.3, 10: 2.5} 
         df_p = df_analysis[df_analysis['type_coup'] == 'Putt'].copy()
         if not df_p.empty:
             def calc_sg(row):
@@ -550,7 +531,6 @@ with tab_sg:
             df_p['SG'] = df_p.apply(calc_sg, axis=1)
             st.metric("SG Putting Total", f"{df_p['SG'].sum():+.1f}")
             
-            # Graph
             df_p = df_p.sort_values('date')
             df_p['SG Cumul'] = df_p['SG'].cumsum()
             fig = px.line(df_p, x='date', y='SG Cumul', title="Tendance Putting")
