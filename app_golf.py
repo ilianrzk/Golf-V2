@@ -7,7 +7,7 @@ from matplotlib.patches import Ellipse, Circle
 import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 28.0 Custom Course", layout="wide")
+st.set_page_config(page_title="GolfShot 29.0 Effect Master", layout="wide")
 
 # --- CSS ---
 st.markdown("""
@@ -26,10 +26,7 @@ if 'parties' not in st.session_state:
 if 'combine_state' not in st.session_state:
     st.session_state['combine_state'] = None
 
-# CONFIGURATION CARTE DE SCORE (Personnalisée)
-# Par 3 : 2, 7, 12, 15
-# Par 5 : 3, 9, 18
-# Par 4 : Reste
+# CONFIGURATION CARTE DE SCORE
 DEFAULT_PARS = [4, 3, 5, 4, 4, 4, 3, 4, 5, 4, 4, 3, 4, 4, 3, 4, 4, 5]
 
 if 'current_card' not in st.session_state:
@@ -89,7 +86,8 @@ if uploaded_file is not None:
 
 st.sidebar.markdown("---")
 
-if st.sidebar.button("Générer Données V28 (Test)"):
+# --- CORRECTION DU GÉNÉRATEUR ICI ---
+if st.sidebar.button("Générer Données V29 (Corrigé)"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(30)]
     
@@ -117,22 +115,32 @@ if st.sidebar.button("Générer Données V28 (Test)"):
             real = np.random.normal(target, 10)
             lat = np.random.randint(0, 4)
             direc = "Centre" if lat == 0 else np.random.choice(["Gauche", "Droite"])
-            st_eff = np.random.choice(["Tout droit", "Fade", "Draw"])
             
+            # CORRECTION : Génération cohérente des effets
+            st_eff = np.random.choice(["Tout droit", "Fade", "Draw"], p=[0.6, 0.2, 0.2])
+            
+            # Logique de réussite (70% de réussite)
+            if np.random.random() < 0.7:
+                real_eff = st_eff # Succès !
+            else:
+                # Raté (on obtient autre chose ou un défaut)
+                real_eff = np.random.choice(["Push", "Pull", "Hook", "Slice", "Tout droit" if st_eff != "Tout droit" else "Fade"])
+
             base_entry.update({
                 'strat_dist': target, 'distance': real, 'score_lateral': lat, 'direction': direc,
                 'type_coup': 'Jeu Long', 'strat_type': "Attaque de Green", 
-                'delta_dist': real-target, 'strat_effet': st_eff
+                'delta_dist': real-target, 
+                'strat_effet': st_eff, 'real_effet': real_eff # On enregistre bien les deux
             })
             
         new_data.append(base_entry)
             
     st.session_state['coups'].extend(new_data)
-    st.sidebar.success("Données V28 générées !")
+    st.sidebar.success("Données V29 générées (avec Effets) !")
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v28.csv", "text/csv")
+    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v29.csv", "text/csv")
 
 if st.sidebar.button("🗑️ Reset Tout"): 
     st.session_state['coups'] = []
@@ -147,7 +155,7 @@ if st.sidebar.button("🗑️ Reset Tout"):
     })
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 28.0 : Custom Course")
+st.title("🏌️‍♂️ GolfShot 29.0 : Effect Master")
 
 tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt = st.tabs([
     "⛳ Parcours & Score", 
@@ -311,7 +319,7 @@ with tab_parcours:
             st.success("Sauvegardé !")
 
 # ==================================================
-# ONGLET 2 : PRACTICE (COMPLET V27)
+# ONGLET 2 : PRACTICE
 # ==================================================
 with tab_practice:
     st.header("🚜 Practice Libre")
