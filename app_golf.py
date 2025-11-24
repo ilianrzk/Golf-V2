@@ -6,10 +6,9 @@ from fpdf import FPDF
 import datetime
 import plotly.express as px
 import plotly.graph_objects as go
-import json
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 39.0 Interactive", layout="wide")
+st.set_page_config(page_title="GolfShot 39.1 High Vis", layout="wide")
 
 # --- CSS ---
 st.markdown("""
@@ -33,29 +32,21 @@ def convert_df(df):
 def init_db():
     conn = sqlite3.connect('golf_database.db', check_same_thread=False)
     c = conn.cursor()
-    
-    # Table Coups
     c.execute('''CREATE TABLE IF NOT EXISTS coups
                  (date TEXT, mode TEXT, club TEXT, strat_dist REAL, distance REAL, 
                   score_lateral REAL, direction TEXT, type_coup TEXT, resultat_putt TEXT,
                   delta_dist REAL, points_test REAL, err_longueur TEXT, lie TEXT,
                   strat_effet TEXT, real_effet TEXT, amplitude TEXT, contact TEXT,
                   dist_remain REAL, strat_type TEXT, par_trou INTEGER)''')
-    
-    # Table Parties
     c.execute('''CREATE TABLE IF NOT EXISTS parties
                  (date TEXT, score INTEGER, putts INTEGER, course_name TEXT)''')
-    
-    # NOUVEAU : Table Parcours
     c.execute('''CREATE TABLE IF NOT EXISTS courses
                  (name TEXT PRIMARY KEY, pars TEXT)''')
-                 
     conn.commit()
     return conn
 
 conn = init_db()
 
-# Fonctions DB Coups & Parties
 def add_coup_to_db(data):
     keys = ['date', 'mode', 'club', 'strat_dist', 'distance', 'score_lateral', 'direction', 
             'type_coup', 'resultat_putt', 'delta_dist', 'points_test', 'err_longueur', 
@@ -74,18 +65,15 @@ def load_coups_from_db():
 
 def add_partie_to_db(data):
     c = conn.cursor()
-    # Gestion rétrocompatibilité si colonne course_name manquante
-    try:
-        c.execute("INSERT INTO parties VALUES (:date, :score, :putts, :course_name)", data)
-    except:
-        c.execute("INSERT INTO parties (date, score, putts) VALUES (:date, :score, :putts)", data)
+    try: c.execute("INSERT INTO parties VALUES (:date, :score, :putts, :course_name)", data)
+    except: c.execute("INSERT INTO parties (date, score, putts) VALUES (:date, :score, :putts)", data)
     conn.commit()
 
 def load_parties_from_db():
     try: return pd.read_sql("SELECT * FROM parties", conn)
     except: return pd.DataFrame()
 
-# NOUVEAU : Fonctions DB Parcours
+# Fonctions Parcours
 def save_course(name, pars_list):
     c = conn.cursor()
     pars_str = ",".join(map(str, pars_list))
@@ -102,8 +90,7 @@ def get_course_pars(name):
     c = conn.cursor()
     c.execute("SELECT pars FROM courses WHERE name=?", (name,))
     res = c.fetchone()
-    if res:
-        return [int(x) for x in res[0].split(',')]
+    if res: return [int(x) for x in res[0].split(',')]
     return [4]*18
 
 # --- 2. GÉNÉRATEUR PDF ---
@@ -238,23 +225,55 @@ if st.sidebar.button("⚠️ Vider DB"):
     st.session_state['coups'] = []; st.rerun()
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 39.0 : Interactive Performance")
+st.title("🏌️‍♂️ GolfShot 39.1 : High Visiblity")
 
 tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt, tab_sg = st.tabs([
     "⛳ Parcours", "🚜 Practice", "🏆 Combine", "🧬 Club DNA", "🎒 Mapping", "🟢 Putting", "📊 Strokes Gained"
 ])
 
-# --- HELPER PLOTLY ---
-def plotly_scatter(data, x_col, y_col, color_col, title):
-    fig = px.scatter(data, x=x_col, y=y_col, color=color_col, 
-                     hover_data=['club', 'lie', 'strat_type'],
-                     title=title, opacity=0.7)
-    # Ajout Cible
-    if 'strat_dist' in data.columns:
-        mean_target = data['strat_dist'].mean()
-        if mean_target > 0:
-            fig.add_hline(y=mean_target, line_dash="dot", line_color="green", annotation_text="Cible")
-    fig.update_layout(xaxis_title="Dispersion Latérale (simulée)", yaxis_title="Distance")
+# --- HELPER PLOTLY AMÉLIORÉ ---
+def plotly_scatter_pro(data, title, show_target=True):
+    """Génère un scatter plot Plotly haute visibilité"""
+    # Palette Pro
+    color_map = {'Practice': '#2196F3', 'Parcours': '#D32F2F', 'Combine': '#FF9800'}
+    
+    fig = px.scatter(
+        data, 
+        x='lat_viz', 
+        y='distance', 
+        color='mode',
+        symbol='contact',
+        color_discrete_map=color_map,
+        hover_data=['date', 'lie', 'strat_type', 'err_longueur'],
+        title=title
+    )
+    
+    # Style des points (Gros et Bordés)
+    fig.update_traces(marker=dict(size=14, line=dict(width=2, color='white'), opacity=0.8))
+    
+    # Cible
+    if show_target and 'strat_dist' in data.columns:
+        target = data['strat_dist'].mean()
+        if target > 0:
+            # Ligne horizontale verte pointillée
+            fig.add_hline(y=target, line_dash="dot", line_color="green", line_width=3, annotation_text="CIBLE")
+            # Ligne verticale (Centre)
+            fig.add_vline(x=0, line_dash="dot", line_color="gray", line_width=2)
+
+    # Layout Pro (Fond blanc, Grille légère)
+    fig.update_layout(
+        xaxis_title="← Gauche (m)  |  Droite (m) →",
+        yaxis_title="Distance (m)",
+        template="plotly_white", # Fond blanc propre
+        font=dict(size=14),      # Texte plus grand
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1
+        )
+    )
     return fig
 
 # ==================================================
@@ -262,10 +281,8 @@ def plotly_scatter(data, x_col, y_col, color_col, title):
 # ==================================================
 with tab_parcours:
     
-    # --- GESTIONNAIRE DE PARCOURS (NOUVEAU) ---
     with st.expander("🗺️ Gestion des Parcours (Base de Données)"):
         c_load, c_new = st.columns(2)
-        
         with c_load:
             courses_avail = get_courses_list()
             if courses_avail:
@@ -274,12 +291,10 @@ with tab_parcours:
                     pars = get_course_pars(selected_course)
                     st.session_state['current_card']['Par'] = pars
                     st.success(f"Parcours {selected_course} chargé !")
-            else:
-                st.info("Aucun parcours enregistré.")
+            else: st.info("Aucun parcours enregistré.")
         
         with c_new:
             new_name = st.text_input("Nom nouveau parcours")
-            # Saisie simplifiée des pars (string)
             default_pars_str = "4,4,3,4,5,4,3,4,5,4,4,3,4,5,4,3,4,5"
             new_pars_str = st.text_area("Pars (séparés par virgule)", default_pars_str)
             if st.button("Sauvegarder Parcours"):
@@ -294,8 +309,6 @@ with tab_parcours:
 
     st.markdown("---")
     
-    # ... (CODE SAISIE PARCOURS EXISTANT - INCHANGÉ) ...
-    # Note: Je compresse ici pour la lisibilité, mais la logique est identique V38
     c1, c2 = st.columns([1, 1])
     with c1:
         idx = st.session_state['current_hole'] - 1
@@ -361,7 +374,7 @@ with tab_parcours:
             st.success("Archivé !")
 
 # ==================================================
-# ONGLET 2 : PRACTICE (COMPLET)
+# ONGLET 2 : PRACTICE
 # ==================================================
 with tab_practice:
     st.header("🚜 Practice")
@@ -437,25 +450,22 @@ with tab_combine:
             st.metric("Moyenne", f"{df_c['points_test'].mean():.0f}/100")
 
 # ==================================================
-# ONGLET 4 : CLUB DNA (INTERACTIF PLOTLY)
+# ONGLET 4 : CLUB DNA (INTERACTIF)
 # ==================================================
 with tab_dna:
-    st.header("🧬 Club DNA Interactif")
+    st.header("🧬 Club DNA")
     if not df_analysis.empty:
         df_l = df_analysis[df_analysis['type_coup'] == 'Jeu Long']
         if not df_l.empty:
             sel = st.selectbox("Club", df_l['club'].unique())
             sub = df_l[df_l['club'] == sel]
             
-            # Simulation X pour visualisation
+            # Calcul X pour visualisation
+            # On simule une dispersion en mètres basée sur le score 0-5
             sub['lat_viz'] = sub.apply(lambda r: (r['score_lateral']*5 if r['direction']=='Droite' else -r['score_lateral']*5) + np.random.normal(0,1), axis=1)
             
-            # Plotly Scatter
-            fig = px.scatter(sub, x='lat_viz', y='distance', color='mode', 
-                             symbol='contact', hover_data=['date', 'lie', 'strat_type'],
-                             title=f"Dispersion Interactive : {sel}")
-            fig.add_hline(y=sub['strat_dist'].mean(), line_dash="dot", annotation_text="Cible Moy.")
-            st.plotly_chart(fig, use_container_width=True)
+            # Plotly Chart
+            st.plotly_chart(plotly_scatter_pro(sub, f"Dispersion : {sel}"), use_container_width=True)
             
             c1, c2 = st.columns(2)
             c1.metric("Dispersion Prof.", f"± {sub['distance'].std():.1f}m")
@@ -472,16 +482,15 @@ with tab_dna:
 # ONGLET 5 : MAPPING (INTERACTIF)
 # ==================================================
 with tab_sac:
-    st.header("🎒 Mapping Interactif")
+    st.header("🎒 Mapping")
     if not df_analysis.empty:
         df_s = df_analysis[df_analysis['type_coup'] == 'Jeu Long']
         if not df_s.empty:
             df_s['club'] = pd.Categorical(df_s['club'], categories=CLUBS_ORDER, ordered=True)
             df_s = df_s.sort_values('club')
             
-            # Plotly Box Plot
-            fig = px.box(df_s, x='club', y='distance', color='club', points="all",
-                         title="Étalonnage Complet (Survolez pour voir les détails)")
+            fig = px.box(df_s, x='club', y='distance', color='club', points="all", title="Étalonnage Interactif")
+            fig.update_layout(template="plotly_white", font=dict(size=14))
             st.plotly_chart(fig, use_container_width=True)
             
             stats = df_s.groupby('club', observed=True)['distance'].agg(['count', 'mean', 'max', 'std']).round(1)
@@ -491,11 +500,11 @@ with tab_sac:
 # ONGLET 6 : PUTTING (INTERACTIF)
 # ==================================================
 with tab_putt:
-    st.header("🟢 Putting 360")
+    st.header("🟢 Putting")
     if not df_analysis.empty:
         df_p = df_analysis[df_analysis['type_coup'] == 'Putt'].copy()
         if not df_p.empty:
-            # Coordonnées Putting
+            # Coordonnées
             def get_pc(r):
                 res = r['resultat_putt']
                 if "Dans" in res: return 0,0
@@ -507,68 +516,43 @@ with tab_putt:
                 return x + np.random.normal(0,0.15), y + np.random.normal(0,0.15)
             
             coords = df_p.apply(get_pc, axis=1, result_type='expand')
-            df_p['x'] = coords[0]
-            df_p['y'] = coords[1]
+            df_p['x'] = coords[0]; df_p['y'] = coords[1]
             
-            col1, col2 = st.columns(2)
-            with col1:
-                fig = px.scatter(df_p, x='x', y='y', color='resultat_putt', 
-                                 title="Boussole Interactive", hover_data=['strat_dist'])
-                fig.update_xaxes(range=[-2, 2], title="Gauche <-> Droite")
-                fig.update_yaxes(range=[-2, 2], title="Court <-> Long")
+            c1, c2 = st.columns(2)
+            with c1:
+                fig = px.scatter(df_p, x='x', y='y', color='resultat_putt', title="Boussole Interactive")
+                fig.update_layout(template="plotly_white")
                 st.plotly_chart(fig, use_container_width=True)
             
-            with col2:
+            with c2:
                 df_p['Zone'] = pd.cut(df_p['strat_dist'], [0,2,5,10,30], labels=["0-2m","2-5m","5-10m","+10m"])
                 piv = df_p.groupby('Zone', observed=False).apply(lambda x: (x['resultat_putt']=="Dans le trou").mean()*100)
-                st.dataframe(piv.to_frame("% Réussite").style.background_gradient(cmap="RdYlGn"), use_container_width=True)
+                st.dataframe(piv.to_frame("%").style.background_gradient(cmap="RdYlGn"), use_container_width=True)
 
 # ==================================================
-# ONGLET 7 : STROKES GAINED (NOUVEAU V39)
+# ONGLET 7 : STROKES GAINED
 # ==================================================
 with tab_sg:
-    st.header("📊 Strokes Gained (Estimation)")
-    st.markdown("Comparaison vs Joueur Moyen (Index 18)")
-    
+    st.header("📊 Strokes Gained")
     if not df_analysis.empty:
-        # 1. SG PUTTING (Simplifié)
-        # Table ref (Putts attendus pour index 18)
+        # SG PUTTING
         ref_putts = {1.5: 1.9, 3: 2.1, 6: 2.3, 10: 2.5} 
-        
         df_p = df_analysis[df_analysis['type_coup'] == 'Putt'].copy()
         if not df_p.empty:
-            def calc_sg_putt(row):
-                # Trouve la ref la plus proche
-                dist = row['strat_dist']
-                expected = 2.0 # Defaut
-                if dist <= 1.5: expected = 1.5
-                elif dist <= 3: expected = 1.9
-                elif dist <= 6: expected = 2.1
-                else: expected = 2.4
-                
-                actual = 1 if row['resultat_putt'] == "Dans le trou" else 2 # Approx: on dit 2 putts si raté le 1er
-                return expected - actual
+            def calc_sg(row):
+                d = row['strat_dist']
+                exp = 2.4
+                if d <= 1.5: exp = 1.5
+                elif d <= 3: exp = 1.9
+                elif d <= 6: exp = 2.1
+                act = 1 if "Dans" in row['resultat_putt'] else 2
+                return exp - act
+            df_p['SG'] = df_p.apply(calc_sg, axis=1)
+            st.metric("SG Putting Total", f"{df_p['SG'].sum():+.1f}")
             
-            df_p['SG'] = df_p.apply(calc_sg_putt, axis=1)
-            total_sg_putt = df_p['SG'].sum()
-            
-            st.metric("Strokes Gained Putting (Total)", f"{total_sg_putt:+.1f}", help="Positif = Vous puttez mieux qu'un index 18")
-            
-            # Graphique évolution SG
+            # Graph
             df_p = df_p.sort_values('date')
-            df_p['SG Cumulé'] = df_p['SG'].cumsum()
-            fig_sg = px.line(df_p, x='date', y='SG Cumulé', title="Évolution Performance Putting")
-            st.plotly_chart(fig_sg, use_container_width=True)
-        else:
-            st.info("Pas assez de putts pour calculer le SG.")
-            
-        # 2. SG DRIVING (Simplifié : Fairway = +0.1, Rough = -0.3, Pénalité = -1)
-        df_d = df_analysis[(df_analysis['club'] == 'Driver') & (df_analysis['type_coup'] == 'Jeu Long')]
-        if not df_d.empty:
-            def calc_sg_drive(row):
-                if row['score_lateral'] == 0: return 0.1
-                if row['score_lateral'] <= 2: return -0.1
-                return -0.5 # Gros raté
-            
-            sg_drive = df_d.apply(calc_sg_drive, axis=1).sum()
-            st.metric("Strokes Gained Driving (Total)", f"{sg_drive:+.1f}")
+            df_p['SG Cumul'] = df_p['SG'].cumsum()
+            fig = px.line(df_p, x='date', y='SG Cumul', title="Tendance Putting")
+            st.plotly_chart(fig, use_container_width=True)
+        else: st.info("Pas assez de putts.")
