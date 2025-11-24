@@ -7,7 +7,7 @@ from matplotlib.patches import Ellipse, Circle
 import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 18.0 Course Architect", layout="wide")
+st.set_page_config(page_title="GolfShot 19.0 Deep Data", layout="wide")
 
 # --- CSS ---
 st.markdown("""
@@ -69,8 +69,8 @@ if uploaded_file is not None:
 
 st.sidebar.markdown("---")
 
-# 2. GÉNÉRATEUR V18
-if st.sidebar.button("Générer Données Test V18"):
+# 2. GÉNÉRATEUR V19
+if st.sidebar.button("Générer Données Test V19"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(60)]
     
@@ -139,17 +139,17 @@ if st.sidebar.button("Générer Données Test V18"):
             })
             
     st.session_state['coups'].extend(new_data)
-    st.sidebar.success("Données V18 générées !")
+    st.sidebar.success("Données V19 générées !")
 
 # 3. EXPORT CSV
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v18.csv", "text/csv")
+    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v19.csv", "text/csv")
     
 if st.sidebar.button("🗑️ Reset Tout"): st.session_state['coups'] = []
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 18.0 : Course Architect")
+st.title("🏌️‍♂️ GolfShot 19.0 : Deep Data")
 
 tab_saisie, tab_dual, tab_sac, tab_putt = st.tabs([
     "📝 Saisie", 
@@ -199,7 +199,6 @@ with tab_saisie:
     with col_m: mode = st.radio("Mode", ["Parcours ⛳", "Practice 🚜"], horizontal=True)
     with col_c: club = st.selectbox("Club en main", CLUBS_ORDER)
     
-    # NOUVEAU : SÉLECTION DU PAR
     if "Parcours" in mode:
         par_trou = st.selectbox("Par du trou", [3, 4, 5])
     else:
@@ -219,12 +218,11 @@ with tab_saisie:
             else:
                 shot_type = st.selectbox("Type de Coup", SHOT_TYPES)
             
-            # LOGIQUE CONDITIONNELLE POUR DISTANCE CIBLE
             ask_target_dist = True
             if "Parcours" in mode and shot_type == "Départ (Tee Shot)" and par_trou in [4, 5]:
                 ask_target_dist = False
                 st.info("🎯 Objectif : Distance Max / Fairway")
-                obj_dist = 0 # Placeholder
+                obj_dist = 0
             
             if ask_target_dist:
                 obj_dist = st.number_input("Dist. Cible", 0, 350, DIST_REF.get(club, 100))
@@ -243,7 +241,6 @@ with tab_saisie:
         else:
             dist_real = st.number_input("Distance Réelle (m)", 0, 350, int(obj_dist) if obj_dist > 0 else 200)
             
-            # Si on n'a pas demandé la cible (Par 4/5 départ), on l'ajuste à la réalité pour éviter des deltas faux
             if not ask_target_dist:
                 obj_dist = dist_real
 
@@ -308,48 +305,52 @@ with tab_dual:
             plot_dispersion_ellipse(ax1, df_practice, "Practice (Labo)", "blue")
             st.pyplot(fig1)
             if not df_practice.empty:
+                # MODIFICATION : AJOUT DISPERSION PROFONDEUR
                 st.metric("Dispersion Latérale", f"± {calc_lat_disp(df_practice):.1f}m")
+                st.metric("Dispersion Profondeur", f"± {df_practice['distance'].std():.1f}m")
 
         with col_parc:
             fig2, ax2 = plt.subplots(figsize=(5, 5))
             plot_dispersion_ellipse(ax2, df_parcours, "Parcours (Réalité)", "red")
             st.pyplot(fig2)
             if not df_parcours.empty:
+                # MODIFICATION : AJOUT DISPERSION PROFONDEUR
                 st.metric("Dispersion Latérale", f"± {calc_lat_disp(df_parcours):.1f}m")
+                st.metric("Dispersion Profondeur", f"± {df_parcours['distance'].std():.1f}m")
         
         st.markdown("---")
         
-        # 2. MAÎTRISE DES EFFETS (NOUVEAU)
+        # 2. MAÎTRISE DES EFFETS (TABLEAU)
         st.subheader("🎨 Maîtrise des Effets")
-        # On regarde uniquement les coups où un effet spécifique était demandé
         df_effets = df_c[df_c['strat_effet'].isin(["Fade", "Draw", "Tout droit", "Balle Basse"])]
         
         if not df_effets.empty:
-            # On vérifie si l'effet réalisé contient le mot clé de l'effet voulu
-            # Ex: Voulu "Fade", Réalisé "Fade" -> OK. 
             df_effets['Reussite'] = df_effets.apply(lambda x: 1 if x['strat_effet'] in x['real_effet'] else 0, axis=1)
             
-            stats_effets = df_effets.groupby('strat_effet')['Reussite'].mean() * 100
+            # MODIFICATION : REMPLACEMENT GRAPH PAR TABLEAU
+            summary_effets = df_effets.groupby('strat_effet').agg(
+                Tentatives=('strat_effet', 'count'),
+                Reussites=('Reussite', 'sum'),
+                Taux=('Reussite', 'mean')
+            )
+            # Mise en forme
+            summary_effets['Taux'] = (summary_effets['Taux'] * 100).round(1)
+            summary_effets.columns = ['Tentatives', 'Réussites', '% Réussite']
             
-            fig_eff, ax_eff = plt.subplots(figsize=(8, 4))
-            sns.barplot(x=stats_effets.index, y=stats_effets.values, palette="magma", ax=ax_eff)
-            ax_eff.set_ylabel("% Réussite")
-            ax_eff.set_ylim(0, 100)
-            ax_eff.set_title(f"Taux de réussite par intention ({sel_club})")
+            st.dataframe(
+                summary_effets.style.background_gradient(cmap="Greens", subset=['% Réussite'])
+                                    .format("{:.1f}%", subset=['% Réussite']),
+                use_container_width=True
+            )
+            st.caption("Ce tableau vous indique précisément la fiabilité de vos effets annoncés.")
             
-            # Ajout des valeurs sur les barres
-            for i, v in enumerate(stats_effets.values):
-                ax_eff.text(i, v + 2, f"{v:.0f}%", ha='center')
-                
-            st.pyplot(fig_eff)
-            st.caption("Ce graphique montre votre capacité à exécuter l'effet que vous avez annoncé.")
         else:
             st.info("Aucun effet spécifique annoncé pour ce club.")
 
     else:
         st.info("En attente de données de jeu long.")
 
-# --- ONGLET 3 : BAG MAPPING (ECART TYPE AJOUTÉ) ---
+# --- ONGLET 3 : BAG MAPPING ---
 with tab_sac:
     if not df_long.empty:
         st.header("🎒 Étalonnage du Sac")
@@ -371,11 +372,9 @@ with tab_sac:
             ax_bag.set_title(f"Distances : {f_type}")
             st.pyplot(fig_bag)
             
-            # MODIFICATION : AJOUT STANDARD DEVIATION (STD)
             stats = df_sac.groupby('club', observed=True)['distance'].agg(['count', 'mean', 'max', 'std']).round(1)
             stats.columns = ['Coups', 'Moyenne', 'Max', 'Écart Type (±m)']
             
-            # Mise en forme conditionnelle
             st.dataframe(
                 stats.style.background_gradient(cmap="Blues", subset=['Moyenne'])
                            .background_gradient(cmap="Reds_r", subset=['Écart Type (±m)']), 
