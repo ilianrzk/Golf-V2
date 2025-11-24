@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import io
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 47.0 Deep Report", layout="wide")
+st.set_page_config(page_title="GolfShot 48.0 Visual Fix", layout="wide")
 
 # --- CSS ---
 st.markdown("""
@@ -93,19 +93,15 @@ def get_course_pars(name):
     if res: return [int(x) for x in res[0].split(',')]
     return [4]*18
 
-# --- 2. GÉNÉRATEUR PDF PRO (AMÉLIORÉ) ---
+# --- 2. GÉNÉRATEUR PDF PRO ---
 class PDF(FPDF):
     def header(self):
         self.set_font('Arial', 'B', 16)
-        self.cell(0, 10, 'Rapport de Performance Golf', 0, 1, 'C')
+        self.cell(0, 10, 'GolfShot Analytics - Rapport Coach', 0, 1, 'C')
         self.set_font('Arial', 'I', 10)
         self.cell(0, 10, f"Genere le {datetime.date.today()}", 0, 1, 'C')
+        self.line(10, 30, 200, 30)
         self.ln(10)
-    
-    def footer(self):
-        self.set_y(-15)
-        self.set_font('Arial', 'I', 8)
-        self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
 
     def chapter_title(self, label):
         self.set_font('Arial', 'B', 12)
@@ -113,143 +109,59 @@ class PDF(FPDF):
         self.cell(0, 10, label, 0, 1, 'L', 1)
         self.ln(4)
 
-    def sub_title(self, label):
-        self.set_font('Arial', 'B', 10)
-        self.cell(0, 8, label, 0, 1, 'L')
-
-    def info_text(self, label):
+    def chapter_body(self, body):
         self.set_font('Arial', '', 10)
-        self.multi_cell(0, 5, label)
-        self.ln(2)
+        self.multi_cell(0, 5, body)
+        self.ln()
 
 def create_pro_pdf(df_coups, df_parties):
     pdf = PDF()
     pdf.add_page()
     
-    # --- 1. VUE D'ENSEMBLE ---
-    pdf.chapter_title("1. SYNTHESE DU JEU")
+    # 1. SYNTHESE
+    pdf.chapter_title("1. SYNTHESE")
     if not df_parties.empty:
-        last_5 = df_parties.tail(5)
-        avg = last_5['score'].mean()
-        best = last_5['score'].min()
-        avg_putt = last_5['putts'].mean()
-        pdf.info_text(f"Index Simule (Moy 5 dernieres): Score {avg:.1f} | Meilleur: {best}")
-        pdf.info_text(f"Moyenne Putts/Partie: {avg_putt:.1f}")
-    else:
-        pdf.info_text("Pas de cartes de score enregistrees.")
-        
-    if not df_coups.empty:
-        nb = len(df_coups)
-        ratio_p = len(df_coups[df_coups['mode']=='Practice']) / nb * 100
-        pdf.info_text(f"Volume d'entrainement analyse: {nb} coups ({ratio_p:.0f}% Practice / {100-ratio_p:.0f}% Parcours)")
-    pdf.ln(5)
-
-    # --- 2. ANALYSE JEU LONG (COMPARATIF) ---
-    pdf.chapter_title("2. JEU LONG : PRACTICE vs PARCOURS")
+        last = df_parties.iloc[-1]
+        pdf.chapter_body(f"Dernier Score: {last['score']} | Putts: {last['putts']}")
+    pdf.chapter_body(f"Volume Total: {len(df_coups)} coups.")
     
-    # En-têtes du tableau
+    # 2. TABLEAU GAPPING
+    pdf.chapter_title("2. ETALONNAGE CLUB")
     pdf.set_font('Arial', 'B', 8)
-    cols = [25, 20, 25, 25, 25, 25, 30]
-    headers = ['Club', 'Mode', 'Moy (m)', 'Max (m)', 'Disp Prof', 'Disp Lat', 'Qualite Contact']
-    for i, h in enumerate(headers):
-        pdf.cell(cols[i], 6, h, 1, 0, 'C')
+    cols = [30, 25, 25, 25, 35]
+    headers = ['Club', 'Moy (m)', 'Max (m)', 'Disp Prof', 'Disp Lat']
+    for i, h in enumerate(headers): pdf.cell(cols[i], 6, h, 1, 0, 'C')
     pdf.ln()
     
     pdf.set_font('Arial', '', 8)
-    
     df_long = df_coups[df_coups['type_coup'] == 'Jeu Long']
-    clubs = ["Driver", "Bois 5", "Hybride", "Fer 5", "Fer 7", "PW", "55°"] # Sélection clés
+    club_list = ["Driver", "Bois 5", "Hybride", "Fer 3", "Fer 5", "Fer 6", "Fer 7", "Fer 8", "Fer 9", "PW", "50°", "55°", "60°"]
     
-    for club in clubs:
-        subset = df_long[df_long['club'] == club]
-        if not subset.empty:
-            for mode in ['Practice', 'Parcours']:
-                data = subset[subset['mode'] == mode]
-                if not data.empty and len(data) > 2:
-                    avg = data['distance'].mean()
-                    maxx = data['distance'].max()
-                    std_depth = data['distance'].std()
-                    std_lat = data['score_lateral'].mean() # Score sur 5
-                    
-                    # Taux contact Bon
-                    ok_contact = len(data[data['contact']=='Bon']) / len(data) * 100
-                    
-                    pdf.cell(cols[0], 6, club, 1, 0, 'C')
-                    pdf.cell(cols[1], 6, mode[:4], 1, 0, 'C') # Prac/Parc
-                    pdf.cell(cols[2], 6, f"{avg:.0f}", 1, 0, 'C')
-                    pdf.cell(cols[3], 6, f"{maxx:.0f}", 1, 0, 'C')
-                    pdf.cell(cols[4], 6, f"+/- {std_depth:.0f}", 1, 0, 'C')
-                    pdf.cell(cols[5], 6, f"{std_lat:.1f}/5", 1, 0, 'C')
-                    pdf.cell(cols[6], 6, f"{ok_contact:.0f}%", 1, 0, 'C')
-                    pdf.ln()
-            # Séparateur entre clubs
-            pdf.cell(sum(cols), 1, "", 1, 1, 'C', fill=True)
-
+    for c in club_list:
+        sub = df_long[df_long['club'] == c]
+        if not sub.empty and len(sub)>1:
+            avg = sub['distance'].mean()
+            maxx = sub['distance'].max()
+            std = sub['distance'].std()
+            lat = sub['score_lateral'].mean()
+            pdf.cell(cols[0], 6, c, 1, 0, 'C')
+            pdf.cell(cols[1], 6, f"{avg:.1f}", 1, 0, 'C')
+            pdf.cell(cols[2], 6, f"{maxx:.1f}", 1, 0, 'C')
+            pdf.cell(cols[3], 6, f"+/- {std:.1f}", 1, 0, 'C')
+            pdf.cell(cols[4], 6, f"{lat:.1f}/5", 1, 0, 'C')
+            pdf.ln()
+            
+    # 3. PUTTING
     pdf.ln(5)
-    
-    # --- 3. DIAGNOSTIC TECHNIQUE ---
-    pdf.chapter_title("3. DIAGNOSTIC TECHNIQUE")
-    
-    # Analyse des effets
-    df_eff = df_long[df_long['strat_effet'].isin(['Fade', 'Draw'])]
-    if not df_eff.empty:
-        pdf.sub_title("Maitrise des trajectoires (Fade/Draw) :")
-        df_eff['Success'] = df_eff.apply(lambda x: 1 if x['strat_effet'] in x['real_effet'] else 0, axis=1)
-        rate = df_eff['Success'].mean() * 100
-        pdf.info_text(f"Taux de reussite global des effets annonces : {rate:.0f}%")
-        
-    # Analyse des Misses
-    miss_lat = df_long[df_long['direction'] != 'Centre']
-    if not miss_lat.empty:
-        side = miss_lat['direction'].mode()[0]
-        pdf.sub_title("Faute Laterale Dominante :")
-        pdf.info_text(f"Tendance a rater a : {side.upper()}")
-        
-    miss_len = df_long[df_long['err_longueur'] != 'Bonne Longueur']
-    if not miss_len.empty:
-        len_err = miss_len['err_longueur'].mode()[0]
-        pdf.sub_title("Gestion de la Profondeur :")
-        pdf.info_text(f"Tendance erreur : {len_err.upper()} (Verifier lie ou selection de club)")
-
-    pdf.add_page() # Nouvelle page pour le putting
-    
-    # --- 4. PUTTING DE PRECISION ---
-    pdf.chapter_title("4. PERFORMANCE PUTTING")
-    
-    df_putt = df_coups[df_coups['type_coup'] == 'Putt'].copy()
-    
-    if not df_putt.empty:
-        # Table réussite par zone
-        df_putt['Zone'] = pd.cut(df_putt['strat_dist'], [0, 2, 5, 10, 30], labels=["Court (0-2m)", "Moyen (2-5m)", "Long (5-10m)", "Lag (+10m)"])
-        
-        pdf.set_font('Arial', 'B', 10)
-        pdf.cell(40, 8, "Zone", 1); pdf.cell(30, 8, "Tentatives", 1); pdf.cell(30, 8, "Reussis", 1); pdf.cell(30, 8, "%", 1); pdf.ln()
-        pdf.set_font('Arial', '', 10)
-        
-        stats = df_putt.groupby('Zone', observed=False).agg(Total=('resultat_putt', 'count'), Made=('resultat_putt', lambda x: (x=='Dans le trou').sum()))
-        
-        for zone, row in stats.iterrows():
-            if row['Total'] > 0:
-                pct = row['Made'] / row['Total'] * 100
-                pdf.cell(40, 8, zone, 1)
-                pdf.cell(30, 8, str(row['Total']), 1)
-                pdf.cell(30, 8, str(row['Made']), 1)
-                pdf.cell(30, 8, f"{pct:.1f}%", 1)
-                pdf.ln()
-        
-        pdf.ln(5)
-        
-        # Analyse des ratés
-        pdf.sub_title("Analyse des Echecs :")
-        misses = df_putt[df_putt['resultat_putt'] != "Dans le trou"]
+    pdf.chapter_title("3. PUTTING")
+    df_p = df_coups[df_coups['type_coup'] == 'Putt']
+    if not df_p.empty:
+        misses = df_p[df_p['resultat_putt'] != "Dans le trou"]
         if not misses.empty:
-            top_3 = misses['resultat_putt'].value_counts().head(3)
-            for k, v in top_3.items():
-                pdf.info_text(f"- {k} : {v} fois")
+            top = misses['resultat_putt'].mode()[0]
+            pdf.chapter_body(f"Faute principale : {top}")
         else:
-            pdf.info_text("Aucun raté enregistré.")
-    else:
-        pdf.info_text("Pas de donnees de putting.")
+            pdf.chapter_body("Aucun rate enregistré.")
 
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
@@ -272,6 +184,78 @@ CLUBS_ORDER = ["Driver", "Bois 5", "Hybride", "Fer 3", "Fer 5", "Fer 6", "Fer 7"
 SHOT_TYPES = ["Départ (Tee Shot)", "Attaque de Green", "Lay-up / Sécurité", "Approche (<50m)", "Sortie de Bunker", "Recovery"]
 PUTT_RESULTS = ["Dans le trou", "Raté - Court", "Raté - Long", "Raté - Gauche", "Raté - Droite", "Raté - Court/Gauche", "Raté - Court/Droite", "Raté - Long/Gauche", "Raté - Long/Droite"]
 DIST_REF = {"Driver": 220, "Bois 5": 200, "Hybride": 180, "Fer 3": 170, "Fer 5": 160, "Fer 6": 150, "Fer 7": 140, "Fer 8": 130, "Fer 9": 120, "PW": 110, "50°": 100, "55°": 90, "60°": 80, "Putter": 3}
+
+# ==================================================
+# HELPER GRAPH PLOTLY (RESTAURÉ V45)
+# ==================================================
+def plot_interactive_dispersion(data, title, color_hex):
+    if data.empty: return go.Figure()
+    
+    # 1. Simulation X (Latéral)
+    def get_x(row):
+        x = row['score_lateral'] * 5 
+        if row['direction'] == 'Gauche': x = -x
+        elif row['direction'] == 'Droite': x = x
+        else: x = 0
+        return x + np.random.normal(0, 1) # Jitter
+    
+    data = data.copy()
+    data['x_viz'] = data.apply(get_x, axis=1)
+    
+    fig = go.Figure()
+    
+    # Points
+    fig.add_trace(go.Scatter(
+        x=data['x_viz'], y=data['distance'],
+        mode='markers',
+        marker=dict(size=12, color=color_hex, line=dict(width=1, color='white'), opacity=0.8),
+        text=data['date'],
+        name='Coups',
+        hovertemplate='Dist: %{y:.1f}m<br>Lat: %{x:.1f}m<br>Date: %{text}'
+    ))
+    
+    # Cible
+    mean_target = data['strat_dist'].mean()
+    if mean_target > 0:
+        fig.add_trace(go.Scatter(x=[0], y=[mean_target], mode='markers', marker=dict(symbol='star', size=18, color='green'), name='Cible'))
+        
+    # Ellipse
+    if len(data) > 3:
+        try:
+            cov = np.cov(data['x_viz'], data['distance'])
+            vals, vecs = np.linalg.eigh(cov)
+            order = vals.argsort()[::-1]
+            vals = vals[order]
+            vecs = vecs[:,order]
+            theta = np.degrees(np.arctan2(*vecs[:,0][::-1]))
+            w, h = 2 * 2 * np.sqrt(vals) # 2 std dev
+            
+            t = np.linspace(0, 2*np.pi, 100)
+            ell_x = w/2 * np.cos(t)
+            ell_y = h/2 * np.sin(t)
+            R = np.array([[np.cos(np.radians(theta)), -np.sin(np.radians(theta))], 
+                          [np.sin(np.radians(theta)), np.cos(np.radians(theta))]])
+            ell_r = np.dot(R, np.array([ell_x, ell_y]))
+            
+            fig.add_trace(go.Scatter(
+                x=ell_r[0,:] + data['x_viz'].mean(),
+                y=ell_r[1,:] + data['distance'].mean(),
+                mode='lines',
+                line=dict(color=color_hex, dash='dot', width=2),
+                name='Zone 95%'
+            ))
+        except: pass
+        
+    fig.update_layout(
+        title=title,
+        xaxis_title="Gauche (m) <---> Droite (m)",
+        yaxis_title="Profondeur (m)",
+        template="plotly_white",
+        height=450,
+        hovermode="closest",
+        showlegend=True
+    )
+    return fig
 
 # ==================================================
 # BARRE LATÉRALE
@@ -325,12 +309,9 @@ with st.sidebar.expander("Assistant", expanded=True):
             if not best.empty:
                 rec = best.iloc[0]
                 st.markdown(f"<div class='caddie-box'>💡 {rec['club']}<br><small>{rec['distance']:.1f}m</small></div>", unsafe_allow_html=True)
-            else: st.warning("?")
-        else: st.warning("Données insuf.")
-    else: st.warning("Données requises.")
 
 st.sidebar.markdown("---")
-if st.sidebar.button("Injecter Données V47"):
+if st.sidebar.button("Injecter Données V48"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(60)]
     for _ in range(200):
@@ -359,40 +340,18 @@ if st.sidebar.button("Injecter Données V47"):
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Backup CSV", convert_df(df_ex), "golf_v47_backup.csv", "text/csv")
+    st.sidebar.download_button("📥 Backup CSV", convert_df(df_ex), "golf_v48_backup.csv", "text/csv")
 
 if st.sidebar.button("⚠️ Vider DB"):
     conn.execute("DELETE FROM coups"); conn.execute("DELETE FROM parties"); conn.commit()
     st.session_state['coups'] = []; st.session_state['parties'] = []; st.rerun()
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 47.0 : Deep Dive Report")
+st.title("🏌️‍♂️ GolfShot 48.0 : Visual Fix")
 
-tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt, tab_sg = st.tabs([
-    "⛳ Parcours", "🚜 Practice", "🏆 Combine", "🧬 Club DNA", "🎒 Mapping", "🟢 Putting", "📊 Strokes Gained"
+tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt = st.tabs([
+    "⛳ Parcours", "🚜 Practice", "🏆 Combine", "🧬 Club DNA", "🎒 Mapping", "🟢 Putting"
 ])
-
-# HELPER GRAPH
-def plot_dispersion_analysis(ax, data, title, color):
-    if data.empty or len(data) < 2: return
-    def get_x(row):
-        x = row['score_lateral'] * 5 
-        if row['direction'] == 'Gauche': return -x
-        if row['direction'] == 'Droite': return x
-        return np.random.normal(0, 1)
-    data = data.copy()
-    data['x_viz'] = data.apply(get_x, axis=1)
-    ax.scatter(data['x_viz'], data['distance'], c=color, alpha=0.6, s=60, edgecolors='white')
-    target = data['strat_dist'].mean()
-    if target > 0: ax.scatter([0], [target], c='green', marker='*', s=150, label='Cible')
-    if len(data) > 3:
-        try:
-            cov = np.cov(data['x_viz'], data['distance'])
-            lambda_, v = np.linalg.eig(cov)
-            ell = Ellipse(xy=(data['x_viz'].mean(), data['distance'].mean()), width=np.sqrt(lambda_[0])*4, height=np.sqrt(lambda_[1])*4, angle=np.rad2deg(np.arccos(v[0, 0])), edgecolor=color, facecolor=color, alpha=0.15, linewidth=2)
-            ax.add_artist(ell)
-        except: pass
-    ax.set_title(title); ax.set_xlabel("Gauche <---> Droite"); ax.set_ylabel("Distance"); ax.grid(True, alpha=0.3)
 
 # ==================================================
 # ONGLET 1 : PARCOURS
@@ -463,6 +422,7 @@ with tab_parcours:
                 'points_test': 0, 'amplitude': 'Plein', 'contact': 'Bon', 'dist_remain': 0
             }
             add_coup_to_db(d)
+            st.session_state['coups'].append(d) # UPDATE SESSION INSTANT
             st.session_state['shots_on_current_hole'] += 1
             if club == "Putter": st.session_state['putts_on_current_hole'] += 1
             st.session_state['current_card'].at[idx, 'Score'] = st.session_state['shots_on_current_hole']
@@ -517,6 +477,7 @@ with tab_practice:
             'par_trou': 0, 'points_test': 0, 'amplitude': 'Plein', 'dist_remain': 0
         }
         add_coup_to_db(data)
+        st.session_state['coups'].append(data)
         st.success("OK")
         st.rerun()
 
@@ -549,6 +510,7 @@ with tab_combine:
                     'lie': 'Practice', 'strat_type': 'Combine', 'par_trou': 0, 'strat_effet': 'N/A', 'real_effet': 'N/A', 'amplitude': 'Plein', 'contact': 'Bon', 'dist_remain': 0, 'err_longueur': 'Ok'
                 }
                 add_coup_to_db(data)
+                st.session_state['coups'].append(data)
                 stt['score_total'] += pts
                 if stt['current_shot'] < 5: stt['current_shot'] += 1
                 else: 
@@ -568,19 +530,22 @@ with tab_combine:
             st.metric("Score Moyen Global", f"{df_c['points_test'].mean():.0f}/100")
             sl = st.selectbox("Club Combine", df_c['club'].unique(), key='sc')
             subset = df_c[df_c['club'] == sl]
+            
             c_a1, c_a2 = st.columns(2)
             with c_a1:
+                # PLOTLY CHART
                 st.plotly_chart(plot_interactive_dispersion(subset, f"Dispersion : {sl}", "#FFA500"), use_container_width=True)
             with c_a2:
                 st.metric("Précision Prof.", f"± {subset['distance'].std():.1f}m")
                 st.metric("Précision Lat.", f"{subset['score_lateral'].mean():.1f}/5")
                 st.write("Comparaison Practice :")
                 data_p = df_analysis[(df_analysis['mode'] == 'Practice') & (df_analysis['club'] == sl)]
+                # PLOTLY CHART
                 st.plotly_chart(plot_interactive_dispersion(data_p, "Ref Practice", "#2196F3"), use_container_width=True)
         else: st.info("Pas de données.")
 
 # ==================================================
-# ONGLET 4 : CLUB DNA
+# ONGLET 4 : CLUB DNA (SPLIT)
 # ==================================================
 with tab_dna:
     st.header("🧬 Club DNA")
@@ -591,11 +556,13 @@ with tab_dna:
             sub = df_l[df_l['club'] == sel]
             c1, c2 = st.columns(2)
             with c1: 
+                # PLOTLY
                 st.plotly_chart(plot_interactive_dispersion(sub[sub['mode']=='Practice'], "Practice (Labo)", "#2196F3"), use_container_width=True)
                 if not sub[sub['mode']=='Practice'].empty:
                     st.metric("Disp. Prof.", f"± {sub[sub['mode']=='Practice']['distance'].std():.1f}m")
                     st.metric("Disp. Lat.", f"{sub[sub['mode']=='Practice']['score_lateral'].mean():.1f}/5")
             with c2:
+                # PLOTLY
                 st.plotly_chart(plot_interactive_dispersion(sub[sub['mode']=='Parcours'], "Parcours (Réalité)", "#D32F2F"), use_container_width=True)
                 if not sub[sub['mode']=='Parcours'].empty:
                     st.metric("Disp. Prof.", f"± {sub[sub['mode']=='Parcours']['distance'].std():.1f}m")
@@ -617,10 +584,11 @@ with tab_sac:
         df_s = df_analysis[df_analysis['type_coup'] == 'Jeu Long']
         if not df_s.empty:
             df_s['club'] = pd.Categorical(df_s['club'], categories=CLUBS_ORDER, ordered=True)
-            fig, ax = plt.subplots(figsize=(10,5))
-            sns.boxplot(data=df_s, x='club', y='distance', ax=ax)
-            st.pyplot(fig)
-            stats = df_s.groupby('club')['distance'].agg(['count', 'mean', 'max', 'std']).round(1)
+            df_s = df_s.sort_values('club')
+            # PLOTLY BOX
+            fig = px.box(df_s, x='club', y='distance', color='club', title="Étalonnage Interactif")
+            st.plotly_chart(fig, use_container_width=True)
+            stats = df_s.groupby('club', observed=True)['distance'].agg(['count', 'mean', 'max', 'std']).round(1)
             st.dataframe(stats.style.background_gradient(cmap="Blues"), use_container_width=True)
 
 # ==================================================
@@ -644,6 +612,7 @@ with tab_putt:
                     return x + np.random.normal(0,0.15), y + np.random.normal(0,0.15)
                 coords = df_p.apply(get_pc, axis=1, result_type='expand')
                 df_p['x'] = coords[0]; df_p['y'] = coords[1]
+                # PLOTLY SCATTER
                 fig = px.scatter(df_p, x='x', y='y', color='resultat_putt', title="Boussole Interactive")
                 st.plotly_chart(fig, use_container_width=True)
             with c2:
@@ -655,30 +624,6 @@ with tab_putt:
                 misses = df_p[df_p['resultat_putt'] != "Dans le trou"]
                 if not misses.empty:
                     cnt = misses['resultat_putt'].value_counts()
+                    # PLOTLY BAR
                     fig_m = px.bar(x=cnt.index, y=cnt.values, color=cnt.values, color_continuous_scale='Reds')
                     st.plotly_chart(fig_m, use_container_width=True)
-
-# ==================================================
-# ONGLET 7 : STROKES GAINED
-# ==================================================
-with tab_sg:
-    st.header("📊 Strokes Gained")
-    if not df_analysis.empty:
-        df_p = df_analysis[df_analysis['type_coup'] == 'Putt'].copy()
-        if not df_p.empty:
-            def calc_sg(row):
-                d = row['strat_dist']
-                exp = 2.4
-                if d <= 1.5: exp = 1.5
-                elif d <= 3: exp = 1.9
-                elif d <= 6: exp = 2.1
-                act = 1 if "Dans" in row['resultat_putt'] else 2
-                return exp - act
-            df_p['SG'] = df_p.apply(calc_sg, axis=1)
-            st.metric("SG Putting Total", f"{df_p['SG'].sum():+.1f}")
-            
-            df_p = df_p.sort_values('date')
-            df_p['SG Cumul'] = df_p['SG'].cumsum()
-            fig = px.line(df_p, x='date', y='SG Cumul', title="Tendance Putting")
-            st.plotly_chart(fig, use_container_width=True)
-        else: st.info("Pas assez de putts.")
