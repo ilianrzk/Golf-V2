@@ -7,7 +7,7 @@ from matplotlib.patches import Ellipse, Circle
 import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 26.0 Ultimate Precision", layout="wide")
+st.set_page_config(page_title="GolfShot 27.0 Practice Master", layout="wide")
 
 # --- CSS ---
 st.markdown("""
@@ -81,7 +81,7 @@ if uploaded_file is not None:
 
 st.sidebar.markdown("---")
 
-if st.sidebar.button("Générer Données V26 (Test)"):
+if st.sidebar.button("Générer Données V27 (Test)"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(30)]
     
@@ -89,14 +89,11 @@ if st.sidebar.button("Générer Données V26 (Test)"):
         mode = np.random.choice(["Parcours", "Practice", "Combine"], p=[0.6, 0.3, 0.1])
         club = np.random.choice(["Driver", "Fer 7", "Putter"])
         
-        # Score test simulé pour le Combine
-        points = np.random.randint(40, 95) if mode == "Combine" else 0
-        
         base_entry = {
             'date': str(np.random.choice(dates)), 'mode': mode, 'club': club,
             'strat_dist': 0, 'distance': 0, 'score_lateral': 0, 'direction': 'Centre',
             'strat_type': 'Entraînement', 'resultat_putt': 'N/A', 'delta_dist': 0, 
-            'points_test': points, 'err_longueur': 'Bonne Longueur', 'lie': 'Fairway',
+            'points_test': 0, 'err_longueur': 'Bonne Longueur', 'lie': 'Fairway',
             'strat_effet': 'N/A', 'real_effet': 'N/A', 'amplitude': 'Plein', 'contact': 'Bon'
         }
 
@@ -123,11 +120,11 @@ if st.sidebar.button("Générer Données V26 (Test)"):
         new_data.append(base_entry)
             
     st.session_state['coups'].extend(new_data)
-    st.sidebar.success("Données V26 générées !")
+    st.sidebar.success("Données V27 générées !")
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v26.csv", "text/csv")
+    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v27.csv", "text/csv")
 
 if st.sidebar.button("🗑️ Reset Tout"): 
     st.session_state['coups'] = []
@@ -140,7 +137,7 @@ if st.sidebar.button("🗑️ Reset Tout"):
     st.session_state['current_card']['Putts'] = 0
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 26.0 : Ultimate Precision")
+st.title("🏌️‍♂️ GolfShot 27.0 : Practice Master")
 
 tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt = st.tabs([
     "⛳ Parcours & Score", 
@@ -197,7 +194,7 @@ with tab_parcours:
         st.markdown("---")
         c_int, c_real = st.columns(2)
         
-        # 1. INTENTION
+        # 1. INTENTION (Avant)
         with c_int:
             st.subheader("🧠 Intention")
             if club == "Putter":
@@ -214,7 +211,7 @@ with tab_parcours:
                 
                 strat_effet = st.selectbox("Effet Voulu", ["Tout droit", "Fade", "Draw", "Balle Basse"], key="p_eff_v")
 
-        # 2. RÉALITÉ
+        # 2. RÉALITÉ (Après)
         with c_real:
             st.subheader("🎯 Réalité")
             if club == "Putter":
@@ -304,25 +301,36 @@ with tab_parcours:
             st.success("Sauvegardé !")
 
 # ==================================================
-# ONGLET 2 : PRACTICE
+# ONGLET 2 : PRACTICE (MODIFIÉ)
 # ==================================================
 with tab_practice:
-    st.header("🚜 Practice")
+    st.header("🚜 Practice Libre")
     c_pr1, c_pr2, c_pr3 = st.columns(3)
-    with c_pr1: club_pr = st.selectbox("Club", CLUBS_ORDER, key="pr_club")
+    
+    with c_pr1: 
+        club_pr = st.selectbox("Club", CLUBS_ORDER, key="pr_club")
+        # AJOUT : Contact
+        contact_pr = st.selectbox("Contact", ["Bon", "Gratte", "Top", "Pointe", "Talon"], key="pr_cont")
+        
     with c_pr2: 
-        obj_pr = st.number_input("Cible", 0, 300, DIST_REF.get(club_pr, 100), key="pr_obj")
-        dist_pr = st.number_input("Réalisé", 0, 300, int(obj_pr), key="pr_real")
+        obj_pr = st.number_input("Cible (m)", 0, 300, DIST_REF.get(club_pr, 100), key="pr_obj")
+        dist_pr = st.number_input("Réalisé (m)", 0, 300, int(obj_pr), key="pr_real")
+        # AJOUT : Effet Voulu
+        strat_eff_pr = st.selectbox("Effet Voulu", ["Tout droit", "Fade", "Draw", "Balle Basse"], key="pr_eff_v")
+        
     with c_pr3:
         dir_pr = st.radio("Direction", ["Gauche", "Centre", "Droite"], key="pr_dir")
         lat_pr = st.slider("Dispersion", 0, 5, 0, key="pr_lat")
+        # AJOUT : Effet Réalisé
+        real_eff_pr = st.selectbox("Effet Réalisé", ["Tout droit", "Fade", "Draw", "Push", "Pull", "Hook", "Slice"], key="pr_eff_r")
 
-    if st.button("Note Practice"):
+    if st.button("Enregistrer Practice"):
         st.session_state['coups'].append({
             'date': str(datetime.date.today()), 'mode': 'Practice', 'club': club_pr,
             'strat_dist': obj_pr, 'distance': dist_pr, 'direction': dir_pr,
             'score_lateral': lat_pr, 'type_coup': 'Jeu Long', 'resultat_putt': 'N/A',
-            'delta_dist': dist_pr - obj_pr
+            'delta_dist': dist_pr - obj_pr, 'contact': contact_pr,
+            'strat_effet': strat_eff_pr, 'real_effet': real_eff_pr
         })
         st.success("OK")
 
@@ -371,7 +379,7 @@ with tab_combine:
         df = pd.DataFrame(st.session_state['coups'])
         df_c = df[df['mode'] == 'Combine']
         if not df_c.empty:
-            # MODIFICATION DEMANDÉE : SCORE SUR 100
+            # SCORE SUR 100
             score_avg = df_c['points_test'].mean()
             st.metric("Score Moyen Combine", f"{score_avg:.0f} / 100")
             
@@ -422,7 +430,7 @@ with tab_dna:
                 st.dataframe(res.to_frame("% Réussite").style.background_gradient(cmap="Greens"), use_container_width=True)
 
 # ==================================================
-# ONGLET 5 : BAG MAPPING (COULEURS CORRIGÉES)
+# ONGLET 5 : BAG MAPPING (COULEURS)
 # ==================================================
 with tab_sac:
     if st.session_state['coups']:
@@ -439,8 +447,7 @@ with tab_sac:
             stats = df_s.groupby('club', observed=True)['distance'].agg(['count', 'mean', 'max', 'std']).round(1)
             stats.columns = ['Nb Coups', 'Moyenne (m)', 'Max (m)', 'Écart Type (m)']
             
-            # MODIFICATION DEMANDÉE : COULEURS SÉMANTIQUES
-            # Ecart Type : Vert = Bas (Bien), Rouge = Haut (Mal) -> RdYlGn_r (Reversed)
+            # COULEURS SÉMANTIQUES
             st.dataframe(
                 stats.style.background_gradient(cmap="Blues", subset=['Moyenne (m)', 'Max (m)'])
                            .background_gradient(cmap="RdYlGn_r", subset=['Écart Type (m)']), 
@@ -448,7 +455,7 @@ with tab_sac:
             )
 
 # ==================================================
-# ONGLET 6 : PUTTING (TABLEAU RESTAURÉ)
+# ONGLET 6 : PUTTING (TABLEAU + COULEURS)
 # ==================================================
 with tab_putt:
     if st.session_state['coups']:
@@ -458,17 +465,17 @@ with tab_putt:
         if not df_p.empty:
             st.header("🟢 Analyse Putting")
             
-            # 1. STATS PAR ZONE (RESTAURÉ)
+            # STATS PAR ZONE (COULEURS)
             st.subheader("📊 Réussite par Zone")
             df_p['Zone'] = pd.cut(df_p['strat_dist'], bins=[0, 2, 5, 10, 30], labels=["0-2m", "2-5m", "5-10m", "+10m"])
             df_p['Success'] = df_p['resultat_putt'] == "Dans le trou"
             
-            # Tableau Pivot coloré
             piv = df_p.groupby('Zone', observed=False).agg(
                 Tentatives=('resultat_putt', 'count'),
                 Reussites=('Success', 'sum')
             )
             piv['% Réussite'] = (piv['Reussites'] / piv['Tentatives'] * 100).round(1)
+            # COULEUR : Vert = Bon %
             st.dataframe(piv.style.background_gradient(cmap="RdYlGn", subset=['% Réussite']), use_container_width=True)
 
             c1, c2 = st.columns(2)
