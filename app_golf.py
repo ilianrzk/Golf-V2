@@ -7,21 +7,24 @@ from matplotlib.patches import Ellipse, Circle
 import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 21.0 Pro Performance", layout="wide")
+st.set_page_config(page_title="GolfShot 22.0 Combine & Score", layout="wide")
 
 # --- CSS ---
 st.markdown("""
 <style>
     .metric-card {background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;}
     h4 {color: #1565C0;}
+    .stButton>button {width: 100%;}
 </style>
 """, unsafe_allow_html=True)
 
 # --- DONNÉES & CONSTANTES ---
 if 'coups' not in st.session_state:
     st.session_state['coups'] = []
-if 'parties' not in st.session_state: # Nouveau pour le Score Global
+if 'parties' not in st.session_state:
     st.session_state['parties'] = []
+if 'combine_state' not in st.session_state:
+    st.session_state['combine_state'] = None # Pour stocker le test en cours
 
 def convert_df(df):
     return df.to_csv(index=False).encode('utf-8')
@@ -34,17 +37,12 @@ CLUBS_ORDER = [
 ]
 
 SHOT_TYPES = [
-    "Départ (Tee Shot)", 
-    "Attaque de Green", 
-    "Lay-up / Sécurité", 
-    "Approche (<50m)", 
-    "Sortie de Bunker", 
-    "Recovery"
+    "Départ (Tee Shot)", "Attaque de Green", "Lay-up / Sécurité", 
+    "Approche (<50m)", "Sortie de Bunker", "Recovery"
 ]
 
 PUTT_RESULTS = [
-    "Dans le trou", 
-    "Court", "Long", "Gauche", "Droite",
+    "Dans le trou", "Court", "Long", "Gauche", "Droite",
     "Court-Gauche", "Court-Droite", "Long-Gauche", "Long-Droite"
 ]
 
@@ -54,10 +52,10 @@ DIST_REF = {
     "PW": 110, "50°": 100, "55°": 90, "60°": 80, "Putter": 3
 }
 
-# --- BARRE LATÉRALE : DATA LAB ---
-st.sidebar.title("⚙️ Gestion Données")
+# --- BARRE LATÉRALE : DATA ---
+st.sidebar.title("⚙️ Data Lab")
 
-# 1. IMPORT CSV
+# IMPORT
 uploaded_file = st.sidebar.file_uploader("📂 Importer Historique (CSV)", type="csv")
 if uploaded_file is not None:
     try:
@@ -71,430 +69,349 @@ if uploaded_file is not None:
 
 st.sidebar.markdown("---")
 
-# 2. GÉNÉRATEUR V21 (MISE A JOUR TEMPORELLE + PROXIMITÉ)
-if st.sidebar.button("Générer Données Test V21"):
+# GÉNÉRATEUR V22
+if st.sidebar.button("Générer Données V22 (Test)"):
+    # Génération rapide pour peupler les tableaux
     new_data = []
-    # Génération sur 90 jours pour voir l'évolution
-    dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(90)]
-    dates.sort() # Du plus ancien au plus récent
-    
-    for i in range(600):
-        # Simulation d'amélioration progressive (le joueur devient meilleur avec le temps)
-        progress = i / 600 # 0 au début, 1 à la fin
+    dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(30)]
+    for _ in range(300):
+        mode = np.random.choice(["Parcours", "Practice", "Combine"], p=[0.5, 0.3, 0.2])
+        club = np.random.choice(["Driver", "Fer 7", "Putter"])
         
-        is_putt = np.random.choice([True, False], p=[0.3, 0.7])
-        mode = np.random.choice(["Practice", "Parcours", "Combine Test"], p=[0.3, 0.5, 0.2])
-        current_date = str(dates[i % 90])
-
-        par_trou = np.random.choice([3, 4, 5], p=[0.2, 0.5, 0.3]) if mode == "Parcours" else 0
-
-        if is_putt:
-            club = "Putter"
-            obj_dist = np.random.exponential(4)
-            if obj_dist < 0.5: obj_dist = 0.5
-            # Réussite s'améliore avec le temps
-            base_prob = max(0.1, 1 - (obj_dist / 6))
-            success_prob = base_prob + (0.1 * progress) 
-            
-            res_putt = "Dans le trou" if np.random.random() < success_prob else np.random.choice(PUTT_RESULTS[1:])
-            
+        if club == "Putter":
+            res = np.random.choice(PUTT_RESULTS, p=[0.4, 0.1, 0.1, 0.1, 0.1, 0.05, 0.05, 0.05, 0.05])
+            dist = np.random.randint(1, 10)
             new_data.append({
-                'date': current_date, 'mode': mode, 'club': club, 'par_trou': par_trou,
-                'strat_dist': round(obj_dist, 1), 'distance': round(obj_dist, 1),
-                'resultat_putt': res_putt, 'type_coup': 'Putt',
-                'pente': np.random.choice(["Plat", "G-D", "D-G"]),
-                'amplitude': 'Plein', 'lie': 'Green', 'strat_type': 'Putt',
-                'real_effet': 'N/A', 'strat_effet': 'N/A', 'dist_remain': 0
+                'date': str(np.random.choice(dates)), 'mode': mode, 'club': club,
+                'strat_dist': dist, 'distance': dist, 'resultat_putt': res, 'type_coup': 'Putt',
+                'score_lateral': 0, 'direction': 'Centre'
             })
-            
         else:
-            club = np.random.choice(["Driver", "Fer 7", "PW", "55°"])
-            
-            if mode == "Practice": shot_type = "Practice"
-            elif mode == "Combine Test": shot_type = "Test Précision"
-            else:
-                if club == "Driver": shot_type = "Départ (Tee Shot)"
-                elif club == "55°": shot_type = np.random.choice(["Approche (<50m)", "Sortie de Bunker"], p=[0.7, 0.3])
-                else: shot_type = "Attaque de Green"
-            
-            lie = "Tee" if club == "Driver" else "Fairway"
-            if shot_type == "Sortie de Bunker": lie = "Bunker"
-            
-            ampli = "Plein" if shot_type != "Approche (<50m)" else "1/2"
-            dist_target = DIST_REF[club]
-            if ampli == "1/2": dist_target *= 0.5
-            
-            # Dispersion s'améliore avec le temps (Progress)
-            std_dev = (15 - (5 * progress)) if mode == "Parcours" else (8 - (3 * progress))
-            dist_real = np.random.normal(dist_target, std_dev)
-            
-            # Score Latéral s'améliore
-            base_lat = 2.5 if mode == "Parcours" else 1.5
-            lat_score = min(5, int(abs(np.random.normal(0, base_lat - (0.5 * progress)))))
-            direction = "Centre" if lat_score == 0 else np.random.choice(["Gauche", "Droite"])
-            
-            # Proximité (Short Game) - Nouveau V21
-            dist_remain = 0
-            if club in ["PW", "50°", "55°", "60°"] and dist_target < 100:
-                # Plus le coup est bon, plus dist_remain est petit
-                dist_remain = abs(dist_target - dist_real) + (lat_score * 2) + np.random.random()
-                dist_remain = round(dist_remain, 1)
-
-            delta = dist_real - dist_target
-            err_L = "Court" if delta < -5 else ("Long" if delta > 5 else "Bonne Longueur")
-            
+            target = DIST_REF[club]
+            real = np.random.normal(target, 10)
+            lat = np.random.randint(0, 4)
+            direc = "Centre" if lat == 0 else np.random.choice(["Gauche", "Droite"])
             new_data.append({
-                'date': current_date, 'mode': mode, 'club': club, 'par_trou': par_trou,
-                'strat_dist': int(dist_target), 'strat_type': shot_type, 'amplitude': ampli,
-                'distance': round(dist_real, 1), 'lie': lie, 'direction': direction, 
-                'score_lateral': lat_score, 'delta_dist': delta, 'err_longueur': err_L,
-                'type_coup': 'Jeu Long', 'resultat_putt': "N/A",
-                'strat_effet': "Tout droit", 'real_effet': "Tout droit",
-                'dist_remain': dist_remain # Nouveau V21
+                'date': str(np.random.choice(dates)), 'mode': mode, 'club': club,
+                'strat_dist': target, 'distance': real, 'score_lateral': lat, 'direction': direc,
+                'type_coup': 'Jeu Long', 'resultat_putt': 'N/A', 'delta_dist': real-target
             })
             
     st.session_state['coups'].extend(new_data)
-    st.sidebar.success("Données V21 (avec Historique) générées !")
+    # Génération fausses parties
+    st.session_state['parties'] = [
+        {'date': str(dates[0]), 'score': 85, 'putts': 32, 'gir': 8, 'fairways': 6},
+        {'date': str(dates[5]), 'score': 82, 'putts': 30, 'gir': 9, 'fairways': 7}
+    ]
+    st.sidebar.success("Données générées !")
 
-# 3. EXPORT CSV
+# EXPORT
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v21.csv", "text/csv")
-    
-if st.sidebar.button("🗑️ Reset Tout"): st.session_state['coups'] = []
+    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v22.csv", "text/csv")
+
+if st.sidebar.button("🗑️ Reset Tout"): 
+    st.session_state['coups'] = []
+    st.session_state['parties'] = []
+    st.session_state['combine_state'] = None
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 21.0 : Pro Performance")
+st.title("🏌️‍♂️ GolfShot 22.0 : Combine & Score")
 
-tab_saisie, tab_evol, tab_short, tab_dna, tab_sac = st.tabs([
-    "📝 Saisie & Score", 
-    "📈 Progression (Temps)",
-    "🏆 Short Game & Combine",
+tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt = st.tabs([
+    "⛳ Parcours & Score", 
+    "🚜 Practice Libre",
+    "🏆 Combine Test",
     "🧬 Analyse Club", 
-    "🎒 Bag Mapping"
+    "🎒 Bag Mapping",
+    "🟢 Putting 360"
 ])
 
-# --- HELPER GRAPH ---
-def plot_dispersion_ellipse(ax, data, title, color_main):
-    if data.empty:
-        ax.text(0.5, 0.5, "Pas de données", ha='center', va='center')
-        return
-    def get_x(row):
-        x = row['score_lateral'] * 5 
-        if row['direction'] == 'Gauche': return -x
-        if row['direction'] == 'Droite': return x
-        return 0 + np.random.normal(0, 1)
-    data = data.copy()
-    data['x_viz'] = data.apply(get_x, axis=1)
-    ax.scatter(data['x_viz'], data['distance'], c=color_main, alpha=0.6, s=60, edgecolors='white')
-    target = data['strat_dist'].mean()
-    if target > 0: ax.scatter([0], [target], c='green', marker='*', s=150, label='Cible')
-    if len(data) > 3:
-        cov = np.cov(data['x_viz'], data['distance'])
-        lambda_, v = np.linalg.eig(cov)
-        lambda_ = np.sqrt(lambda_)
-        ell = Ellipse(xy=(data['x_viz'].mean(), data['distance'].mean()),
-                      width=lambda_[0]*4, height=lambda_[1]*4,
-                      angle=np.rad2deg(np.arccos(v[0, 0])), 
-                      edgecolor=color_main, facecolor=color_main, alpha=0.15, linewidth=2)
-        ax.add_artist(ell)
-    ax.set_title(title)
-    ax.set_xlabel("Gauche (m) <---> Droite (m)")
-    ax.set_ylabel("Distance (m)")
-    ax.grid(True, alpha=0.3)
-
-# --- ONGLET 1 : SAISIE (AVEC MODES ET SCORE) ---
-with tab_saisie:
-    # NOUVEAU : AJOUT DU MODE "COMBINE TEST"
-    col_m, col_c = st.columns(2)
-    with col_m: mode = st.radio("Mode", ["Parcours ⛳", "Practice 🚜", "Combine Test 🏆"], horizontal=True)
-    with col_c: club = st.selectbox("Club en main", CLUBS_ORDER)
+# ==================================================
+# ONGLET 1 : PARCOURS & CARTE DE SCORE
+# ==================================================
+with tab_parcours:
+    col_saisie, col_carte = st.columns([1, 1])
     
-    if "Parcours" in mode:
-        par_trou = st.selectbox("Par du trou", [3, 4, 5])
-    else:
-        par_trou = 0
-
-    st.markdown("---")
-    
-    # --- SAISIE COUP STANDARD ---
-    col_int, col_real = st.columns(2)
-    with col_int:
-        st.subheader("1️⃣ STRATÉGIE")
-        if club == "Putter":
-            obj_dist = st.number_input("Dist. Cible (m)", 0.0, 30.0, 3.0, 0.1)
-            strat_effet = "N/A"
-        else:
-            if mode == "Practice": shot_type = "Practice"
-            elif mode == "Combine Test": shot_type = "Test Précision"
-            else: shot_type = st.selectbox("Type de Coup", SHOT_TYPES)
-            
-            ask_target_dist = True
-            if "Parcours" in mode and shot_type == "Départ (Tee Shot)" and par_trou in [4, 5]:
-                ask_target_dist = False
-                st.info("🎯 Objectif : Distance Max / Fairway")
-                obj_dist = 0
-            
-            if ask_target_dist:
-                obj_dist = st.number_input("Dist. Cible", 0, 350, DIST_REF.get(club, 100))
-            
-            amplitude = st.radio("Amplitude", ["Plein", "3/4", "1/2"], horizontal=True)
-            strat_effet = st.selectbox("Effet Voulu", ["Tout droit", "Fade", "Draw", "Balle Basse"])
-
-    with col_real:
-        st.subheader("2️⃣ RÉSULTAT")
-        if club == "Putter":
-            res_putt = st.selectbox("Résultat du Putt", PUTT_RESULTS)
-            dist_real = obj_dist 
-            lie, score_lat, direction, amplitude = "Green", 0, "Centre", "Plein"
-            shot_type = "Putt"
-            real_effet = "N/A"
-            dist_remain = 0
-        else:
-            dist_real = st.number_input("Distance Réelle (m)", 0, 350, int(obj_dist) if obj_dist > 0 else 200)
-            if not ask_target_dist: obj_dist = dist_real
-            lie = st.selectbox("Situation (Lie)", ["Tee", "Fairway", "Rough", "Bunker"])
-            real_effet = st.selectbox("Effet Réalisé", ["Tout droit", "Fade", "Draw", "Push (Droite)", "Pull (Gauche)", "Hook", "Slice", "Top", "Gratte"])
-            
-            c_dir, c_sco = st.columns(2)
-            with c_dir: direction = st.radio("Direction", ["Gauche", "Centre", "Droite"], horizontal=True)
-            with c_sco: score_lat = st.number_input("Écart (0-5)", 0, 5, 0) if direction != "Centre" else 0
-            
-            # NOUVEAU V21 : PROXIMITÉ AU DRAPEAU (POUR LES APPROCHES)
-            dist_remain = 0
-            if shot_type in ["Approche (<50m)", "Sortie de Bunker", "Test Précision"] or club in ["50°", "55°", "60°", "PW"]:
-                st.markdown("#### 📏 Proximité")
-                dist_remain = st.number_input("Distance restante au trou (m)", 0.0, 50.0, 0.0)
-            
-            res_putt = "N/A"
-
-    if st.button("💾 Enregistrer Coup", type="primary", use_container_width=True):
-        delta = dist_real - obj_dist
-        err_L = "Court" if delta < -5 else ("Long" if delta > 5 else "Bonne Longueur")
+    # --- A. SAISIE COUP PARCOURS ---
+    with col_saisie:
+        st.header("📝 Saisie Coup (Parcours)")
+        club = st.selectbox("Club", CLUBS_ORDER, key="p_club")
+        par_trou = st.selectbox("Par du trou", [3, 4, 5], key="p_par")
         
-        # Calcul Points Combine Test (Simplifié)
-        points_test = 0
-        if mode == "Combine Test":
-            if score_lat == 0: points_test += 50
-            elif score_lat == 1: points_test += 30
-            elif score_lat == 2: points_test += 10
-            
-            if abs(delta) < 5: points_test += 50
-            elif abs(delta) < 10: points_test += 25
-            
-            st.toast(f"🏆 Score du coup : {points_test}/100")
+        c1, c2 = st.columns(2)
+        with c1:
+            shot_type = st.selectbox("Type", SHOT_TYPES, key="p_type")
+            # Logique Tee Shot Par 4/5
+            if shot_type == "Départ (Tee Shot)" and par_trou > 3:
+                obj_dist = 0.0
+                st.caption("🎯 Objectif : Max Distance")
+            else:
+                obj_dist = st.number_input("Cible (m)", 0, 350, DIST_REF.get(club, 100), key="p_obj")
+                
+        with c2:
+            dist_real = st.number_input("Réalisé (m)", 0, 350, int(obj_dist) if obj_dist>0 else 200, key="p_real")
+            real_effet = st.selectbox("Effet", ["Tout droit", "Fade", "Draw", "Raté"], key="p_eff")
 
-        st.session_state['coups'].append({
-            'date': str(datetime.date.today()), 'mode': mode.split()[0], 'club': club, 'par_trou': par_trou,
-            'strat_dist': obj_dist, 'strat_type': shot_type, 'amplitude': amplitude, 'strat_effet': strat_effet,
-            'distance': dist_real, 'lie': lie, 'resultat_putt': res_putt,
-            'direction': direction, 'score_lateral': score_lat, 'real_effet': real_effet,
-            'delta_dist': delta, 'err_longueur': err_L, 'dist_remain': dist_remain, 'points_test': points_test,
-            'type_coup': 'Putt' if club == "Putter" else 'Jeu Long'
-        })
-        st.success("Sauvegardé !")
+        # Dispersion
+        if club != "Putter":
+            cc1, cc2 = st.columns(2)
+            with cc1: direction = st.radio("Axe", ["Gauche", "Centre", "Droite"], horizontal=True, key="p_dir")
+            with cc2: score_lat = st.slider("Écart (0-5)", 0, 5, 0, key="p_lat")
+        else:
+            direction, score_lat = "Centre", 0
 
-    # NOUVEAU V21 : SAISIE FIN DE PARTIE (STROKES GAINED SIMPLIFIÉ)
-    if "Parcours" in mode:
-        with st.expander("📝 Fin de Partie (Score & Stats)"):
-            c_s1, c_s2, c_s3 = st.columns(3)
-            with c_s1: score_final = st.number_input("Score Final (+/-)", -20, 150, 0, help="Par rapport au Par (ex: +12)")
-            with c_s2: nb_putts = st.number_input("Total Putts", 18, 50, 32)
-            with c_s3: penaltys = st.number_input("Pénalités", 0, 20, 0)
-            if st.button("Enregistrer Partie"):
+        if st.button("Valider Coup Parcours", type="primary"):
+            delta = dist_real - obj_dist if obj_dist > 0 else 0
+            st.session_state['coups'].append({
+                'date': str(datetime.date.today()), 'mode': 'Parcours', 'club': club,
+                'strat_dist': obj_dist, 'distance': dist_real, 'direction': direction,
+                'score_lateral': score_lat, 'real_effet': real_effet, 'type_coup': 'Jeu Long',
+                'delta_dist': delta, 'resultat_putt': 'N/A'
+            })
+            st.success("Coup noté !")
+
+    # --- B. CARTE DE SCORE (FIN DE PARTIE) ---
+    with col_carte:
+        st.header("📋 Carte de Score")
+        with st.form("score_form"):
+            st.write("Fin de partie - Résumé")
+            c_sc1, c_sc2 = st.columns(2)
+            with c_sc1:
+                score_f = st.number_input("Score Final (Total)", 60, 120, 80)
+                nb_putts = st.number_input("Nb Putts", 18, 50, 32)
+            with c_sc2:
+                gir = st.number_input("GIR (Greens Touchés)", 0, 18, 5)
+                fairways = st.number_input("Fairways Touchés", 0, 14, 5)
+            
+            if st.form_submit_button("Enregistrer la Partie"):
                 st.session_state['parties'].append({
-                    'date': str(datetime.date.today()), 'score': score_final, 'putts': nb_putts, 'penalties': penaltys
+                    'date': str(datetime.date.today()),
+                    'score': score_f, 'putts': nb_putts, 'gir': gir, 'fairways': fairways
                 })
-                st.success("Partie archivée !")
+                st.success("Partie ajoutée à l'historique !")
 
-# --- DATA LOAD ---
-if st.session_state['coups']:
-    df = pd.DataFrame(st.session_state['coups'])
-    df_long = df[df['type_coup'] == 'Jeu Long']
-    df_putt = df[df['type_coup'] == 'Putt']
-else:
-    df_long = pd.DataFrame()
-    df_putt = pd.DataFrame()
-
-# --- ONGLET 2 : PROGRESSION TEMPORELLE (NOUVEAU V21) ---
-with tab_evol:
-    if not df_long.empty:
-        st.header("📈 Évolution de la Performance")
-        
-        # Préparation des dates
-        df_long['date_dt'] = pd.to_datetime(df_long['date'])
-        df_long = df_long.sort_values('date_dt')
-        
-        sel_club_evo = st.selectbox("Club à suivre", df_long['club'].unique())
-        df_evo = df_long[df_long['club'] == sel_club_evo]
-        
-        if len(df_evo) > 5:
-            col_e1, col_e2 = st.columns(2)
-            
-            with col_e1:
-                st.subheader("Puissance (Distance)")
-                # Moyenne Glissante
-                df_evo['Moyenne Mobile'] = df_evo['distance'].rolling(window=5).mean()
-                
-                fig_ev1, ax_ev1 = plt.subplots(figsize=(6, 4))
-                ax_ev1.plot(df_evo['date_dt'], df_evo['distance'], 'o', alpha=0.3, color='gray')
-                ax_ev1.plot(df_evo['date_dt'], df_evo['Moyenne Mobile'], color='blue', linewidth=3, label='Tendance')
-                ax_ev1.set_title(f"Distance Moyenne : {sel_club_evo}")
-                ax_ev1.grid(True, alpha=0.3)
-                st.pyplot(fig_ev1)
-                
-            with col_e2:
-                st.subheader("Précision (Score Latéral)")
-                # Score Latéral (plus bas = mieux)
-                df_evo['Precision Mobile'] = df_evo['score_lateral'].rolling(window=5).mean()
-                
-                fig_ev2, ax_ev2 = plt.subplots(figsize=(6, 4))
-                ax_ev2.plot(df_evo['date_dt'], df_evo['score_lateral'], 'o', alpha=0.3, color='red')
-                ax_ev2.plot(df_evo['date_dt'], df_evo['Precision Mobile'], color='green', linewidth=3, label='Tendance')
-                ax_ev2.set_title(f"Écarts Latéraux (0=Parfait)")
-                ax_ev2.set_ylim(0, 5)
-                ax_ev2.grid(True, alpha=0.3)
-                st.pyplot(fig_ev2)
-                st.caption("Si la courbe verte descend, votre précision s'améliore.")
-        else:
-            st.warning("Pas assez de données temporelles pour tracer une courbe (min 5 coups).")
-            
-        # Suivi du Score (si parties enregistrées)
+        # Historique des parties
         if st.session_state['parties']:
-            st.subheader("Évolution du Score & Handicap")
+            st.subheader("Historique")
             df_part = pd.DataFrame(st.session_state['parties'])
-            df_part['date_dt'] = pd.to_datetime(df_part['date'])
-            st.line_chart(df_part.set_index('date_dt')[['score', 'putts']])
-    else:
-        st.info("Générez des données pour voir l'évolution.")
+            st.dataframe(df_part.style.highlight_min(subset=['score'], color='lightgreen'), use_container_width=True)
 
-# --- ONGLET 3 : SHORT GAME & COMBINE (NOUVEAU V21) ---
-with tab_short:
-    c_short, c_combine = st.columns(2)
+# ==================================================
+# ONGLET 2 : PRACTICE LIBRE
+# ==================================================
+with tab_practice:
+    st.header("🚜 Practice Libre (Drill)")
     
-    with c_short:
-        st.header("🏆 Short Game (Scrambling)")
-        if 'dist_remain' in df_long.columns:
-            # On filtre les coups d'approche
-            df_sg = df_long[(df_long['dist_remain'] > 0) & (df_long['dist_remain'] < 50)]
+    c_pr1, c_pr2, c_pr3 = st.columns(3)
+    with c_pr1:
+        club_pr = st.selectbox("Club", CLUBS_ORDER, key="pr_club")
+        # Plus de type de coup ici
+    with c_pr2:
+        obj_pr = st.number_input("Cible (m)", 0, 300, DIST_REF.get(club_pr, 100), key="pr_obj")
+        dist_pr = st.number_input("Réalisé (m)", 0, 300, int(obj_pr), key="pr_real")
+    with c_pr3:
+        dir_pr = st.radio("Direction", ["Gauche", "Centre", "Droite"], key="pr_dir")
+        lat_pr = st.slider("Dispersion (0-5)", 0, 5, 0, key="pr_lat")
+
+    if st.button("Enregistrer Practice"):
+        st.session_state['coups'].append({
+            'date': str(datetime.date.today()), 'mode': 'Practice', 'club': club_pr,
+            'strat_dist': obj_pr, 'distance': dist_pr, 'direction': dir_pr,
+            'score_lateral': lat_pr, 'type_coup': 'Jeu Long', 'resultat_putt': 'N/A',
+            'delta_dist': dist_pr - obj_pr
+        })
+        st.success("Ballon noté !")
+
+# ==================================================
+# ONGLET 3 : COMBINE TEST (NOUVEAU)
+# ==================================================
+with tab_combine:
+    st.header("🏆 Combine Test Challenge")
+    st.markdown("L'IA sélectionne 3 clubs. Vous tapez 5 balles avec chaque club. Objectif : Précision.")
+
+    # 1. INITIALISATION DU TEST
+    if st.button("🎲 Lancer un Nouveau Combine"):
+        # Choix aléatoire de 3 clubs (hors putter)
+        candidates = [c for c in CLUBS_ORDER if c != "Putter"]
+        selected_clubs = np.random.choice(candidates, 3, replace=False)
+        
+        # Définition des cibles
+        targets = []
+        for c in selected_clubs:
+            base = DIST_REF[c]
+            # On ajoute une variation aléatoire pour rendre l'exercice difficile
+            variation = np.random.randint(-5, 6) 
+            targets.append({'club': c, 'target': base + variation})
             
-            if not df_sg.empty:
-                avg_prox = df_sg['dist_remain'].mean()
-                best_prox = df_sg['dist_remain'].min()
-                
-                st.metric("Proximité Moyenne au drapeau", f"{avg_prox:.2f} m")
-                st.metric("Meilleure Approche", f"{best_prox:.2f} m")
-                
-                st.write("**Répartition par Club**")
-                prox_by_club = df_sg.groupby('club')['dist_remain'].mean().sort_values()
-                st.bar_chart(prox_by_club)
-                st.caption("Plus la barre est basse, plus vous mettez la balle près du trou.")
-            else:
-                st.info("Aucune donnée de proximité (Saisissez 'Distance restante' lors des approches).")
-                
-    with c_combine:
-        st.header("🥇 Combine Test")
-        df_test = df_long[df_long['mode'] == 'Combine']
-        
-        if 'points_test' in df_long.columns:
-            # On prend les coups qui ont des points > 0
-            df_points = df_long[df_long['points_test'] > 0]
-            if not df_points.empty:
-                avg_score = df_points['points_test'].mean()
-                last_score = df_points.iloc[-1]['points_test']
-                
-                st.metric("Score Moyen au Test", f"{avg_score:.0f} / 100")
-                st.metric("Dernier coup noté", f"{last_score:.0f} / 100")
-                
-                st.write("**Derniers Tests**")
-                st.dataframe(df_points[['date', 'club', 'distance', 'points_test']].tail(10))
-            else:
-                st.info("Lancez le mode 'Combine Test' et enregistrez des coups pour voir votre score.")
+        st.session_state['combine_state'] = {
+            'clubs_info': targets,
+            'current_club_idx': 0,
+            'current_shot': 1,
+            'results': [],
+            'score_total': 0
+        }
+        st.rerun()
 
-    # STROKES GAINED SIMPLIFIÉ
-    st.markdown("---")
-    st.header("📊 Bilan Partie (Strokes Gained Simplifié)")
-    if st.session_state['parties']:
-        last_round = st.session_state['parties'][-1]
+    # 2. DÉROULEMENT DU TEST
+    state = st.session_state['combine_state']
+    
+    if state:
+        current_idx = state['current_club_idx']
         
-        col_sg1, col_sg2, col_sg3 = st.columns(3)
-        col_sg1.metric("Dernier Score", f"{last_round['score']}")
-        
-        # Logique simplifiée SG
-        # Base amateur : 36 putts. Base pro : 29 putts.
-        sg_putt = 34 - last_round['putts'] # Comparaison vs Scratch 34 putts
-        col_sg2.metric("SG Putting", f"{sg_putt:+.1f}", help="Positif = Vous avez gagné des points au putting")
-        
-        # Perte balles
-        sg_pen = -(last_round['penalties'] * 1) # 1 coup perdu par pénalité approx
-        col_sg3.metric("Pénalités (Coups perdus)", f"{sg_pen}", help="Impact direct sur le score")
-        
-    else:
-        st.info("Enregistrez une fin de partie dans l'onglet Saisie.")
+        if current_idx < 3:
+            info = state['clubs_info'][current_idx]
+            club_actuel = info['club']
+            cible_actuelle = info['target']
+            shot_num = state['current_shot']
+            
+            st.info(f"### Club {current_idx + 1}/3 : {club_actuel} | Cible : {cible_actuelle}m")
+            st.progress((current_idx * 5 + shot_num) / 15)
+            st.write(f"**Balle {shot_num} / 5**")
+            
+            # Saisie du coup Combine
+            c_comb1, c_comb2 = st.columns(2)
+            with c_comb1:
+                dist_c = st.number_input("Distance réalisée", 0, 350, cible_actuelle, key=f"c_{current_idx}_{shot_num}")
+            with c_comb2:
+                lat_c = st.slider("Dispersion (0=Parfait, 5=Raté)", 0, 5, 0, key=f"cl_{current_idx}_{shot_num}")
+                dir_c = "Centre" if lat_c == 0 else st.radio("Côté", ["Gauche", "Droite"], horizontal=True, key=f"cd_{current_idx}_{shot_num}")
 
-
-# --- ONGLET 4 : ANALYSE CLUB (V20) ---
-with tab_dna:
-    if not df_long.empty:
-        st.header("🧬 Club DNA")
-        sel_club = st.selectbox("Choisir Club pour Analyse", df_long['club'].unique())
-        df_c = df_long[df_long['club'] == sel_club]
-        
-        col_prac, col_parc = st.columns(2)
-        df_practice = df_c[df_c['mode'] == 'Practice']
-        df_parcours = df_c[df_c['mode'] == 'Parcours']
-        
-        with col_prac:
-            fig1, ax1 = plt.subplots(figsize=(5, 5))
-            plot_dispersion_ellipse(ax1, df_practice, "Practice (Labo)", "blue")
-            st.pyplot(fig1)
-            if not df_practice.empty:
-                st.metric("Score Latéral Moyen", f"{df_practice['score_lateral'].mean():.1f} / 5")
-                st.metric("Dispersion Profondeur", f"± {df_practice['distance'].std():.1f}m")
-
-        with col_parc:
-            fig2, ax2 = plt.subplots(figsize=(5, 5))
-            plot_dispersion_ellipse(ax2, df_parcours, "Parcours (Réalité)", "red")
-            st.pyplot(fig2)
-            if not df_parcours.empty:
-                st.metric("Score Latéral Moyen", f"{df_parcours['score_lateral'].mean():.1f} / 5")
-                st.metric("Dispersion Profondeur", f"± {df_parcours['distance'].std():.1f}m")
-        
-        st.markdown("---")
-        st.subheader("🎨 Maîtrise des Effets")
-        df_effets = df_c[df_c['strat_effet'].isin(["Fade", "Draw", "Tout droit", "Balle Basse"])]
-        if not df_effets.empty:
-            df_effets['Reussite'] = df_effets.apply(lambda x: 1 if x['strat_effet'] in x['real_effet'] else 0, axis=1)
-            summary_effets = df_effets.groupby('strat_effet').agg(Tentatives=('strat_effet', 'count'), Reussites=('Reussite', 'sum'), Taux=('Reussite', 'mean'))
-            summary_effets['Taux'] = (summary_effets['Taux'] * 100).round(1)
-            st.dataframe(summary_effets.style.background_gradient(cmap="Greens", subset=['Taux']).format("{:.1f}%", subset=['Taux']), use_container_width=True)
+            if st.button("Valider Balle"):
+                # Calcul Points (0-100)
+                # Précision distance
+                err_dist = abs(dist_c - cible_actuelle)
+                pts_dist = max(0, 50 - (err_dist * 2)) # 50 pts max pour distance
+                # Précision latérale
+                pts_lat = max(0, 50 - (lat_c * 10)) # 50 pts max pour direction
+                score_balle = pts_dist + pts_lat
+                
+                # Sauvegarde dans l'historique global
+                st.session_state['coups'].append({
+                    'date': str(datetime.date.today()), 'mode': 'Combine', 'club': club_actuel,
+                    'strat_dist': cible_actuelle, 'distance': dist_c, 'direction': dir_c,
+                    'score_lateral': lat_c, 'type_coup': 'Jeu Long', 'points_test': score_balle,
+                    'resultat_putt': 'N/A', 'delta_dist': dist_c - cible_actuelle
+                })
+                
+                state['score_total'] += score_balle
+                
+                # Incrémentation
+                if state['current_shot'] < 5:
+                    state['current_shot'] += 1
+                else:
+                    state['current_shot'] = 1
+                    state['current_club_idx'] += 1
+                
+                st.rerun()
         else:
-            st.info("Aucun effet spécifique annoncé.")
+            # FIN DU TEST
+            st.success(f"🎉 Combine Terminé ! Score Final : {int(state['score_total'] / 15)} / 100")
+            if st.button("Fermer le Test"):
+                st.session_state['combine_state'] = None
+                st.rerun()
     else:
-        st.info("En attente de données.")
+        st.write("En attente de lancement...")
 
-# --- ONGLET 5 : BAG MAPPING (V20) ---
-with tab_sac:
-    if not df_long.empty:
-        st.header("🎒 Étalonnage du Sac")
-        options_filtre = ["Tous les coups"] + [t for t in SHOT_TYPES]
-        f_type = st.selectbox("Filtrer par situation", options_filtre, index=0)
+# ==================================================
+# ONGLET 4 : ANALYSE CLUB (V21)
+# ==================================================
+with tab_dna:
+    if st.session_state['coups']:
+        df = pd.DataFrame(st.session_state['coups'])
+        df_long = df[df['type_coup'] == 'Jeu Long']
         
-        if f_type == "Tous les coups": df_sac = df_long.copy()
-        else: df_sac = df_long[df_long['strat_type'] == f_type].copy()
+        if not df_long.empty:
+            st.header("🧬 Club DNA")
+            sel_club = st.selectbox("Club", df_long['club'].unique())
+            df_c = df_long[df_long['club'] == sel_club]
+            
+            col_prac, col_parc = st.columns(2)
+            
+            # Helper Ellipse
+            def plot_ellipse(ax, d, color, title):
+                if d.empty: return
+                def get_x(r):
+                    x = r['score_lateral'] * 5 
+                    if r['direction'] == 'Gauche': return -x
+                    if r['direction'] == 'Droite': return x
+                    return np.random.normal(0,1)
+                d['x'] = d.apply(get_x, axis=1)
+                ax.scatter(d['x'], d['distance'], c=color, alpha=0.5)
+                if len(d) > 3:
+                    ell = Ellipse(xy=(d['x'].mean(), d['distance'].mean()), width=d['x'].std()*4, height=d['distance'].std()*4, edgecolor=color, facecolor='none')
+                    ax.add_artist(ell)
+                ax.set_title(title)
+
+            with col_prac:
+                fig1, ax1 = plt.subplots()
+                plot_ellipse(ax1, df_c[df_c['mode'] == 'Practice'], 'blue', 'Practice')
+                st.pyplot(fig1)
+            with col_parc:
+                fig2, ax2 = plt.subplots()
+                plot_ellipse(ax2, df_c[df_c['mode'] == 'Parcours'], 'red', 'Parcours')
+                st.pyplot(fig2)
+    else:
+        st.info("Pas de données.")
+
+# ==================================================
+# ONGLET 5 : BAG MAPPING (V21)
+# ==================================================
+with tab_sac:
+    if st.session_state['coups']:
+        st.header("🎒 Étalonnage")
+        df = pd.DataFrame(st.session_state['coups'])
+        df_sac = df[df['type_coup'] == 'Jeu Long']
         
         if not df_sac.empty:
             df_sac['club'] = pd.Categorical(df_sac['club'], categories=CLUBS_ORDER, ordered=True)
-            df_sac = df_sac.sort_values('club')
+            fig, ax = plt.subplots(figsize=(10, 5))
+            sns.boxplot(data=df_sac.sort_values('club'), x='club', y='distance', ax=ax)
+            st.pyplot(fig)
             
-            fig_bag, ax_bag = plt.subplots(figsize=(12, 5))
-            sns.boxplot(x='club', y='distance', data=df_sac, ax=ax_bag, palette="viridis")
-            ax_bag.grid(True, axis='y', alpha=0.3)
-            st.pyplot(fig_bag)
+            stats = df_sac.groupby('club', observed=True)['distance'].agg(['mean', 'std', 'max']).round(1)
+            st.dataframe(stats.style.background_gradient(cmap="Blues"), use_container_width=True)
+
+# ==================================================
+# ONGLET 6 : PUTTING 360 (V21)
+# ==================================================
+with tab_putt:
+    if st.session_state['coups']:
+        df = pd.DataFrame(st.session_state['coups'])
+        df_putt = df[df['type_coup'] == 'Putt']
+        
+        if not df_putt.empty:
+            st.header("🟢 Analyse Putting")
             
-            stats = df_sac.groupby('club', observed=True)['distance'].agg(['count', 'mean', 'max', 'std']).round(1)
-            stats.columns = ['Coups', 'Moyenne', 'Max', 'Écart Type (±m)']
-            st.dataframe(stats.style.background_gradient(cmap="Blues", subset=['Moyenne']).background_gradient(cmap="Reds_r", subset=['Écart Type (±m)']), use_container_width=True)
-        else:
-            st.warning("Pas de données.")
+            c_p1, c_p2 = st.columns([2, 1])
             
+            with c_p1:
+                st.subheader("Boussole des Ratés")
+                def get_coords(r):
+                    res = r['resultat_putt']
+                    if res == "Dans le trou": return 0,0
+                    x, y = 0, 0
+                    if "Gauche" in res: x = -1
+                    if "Droite" in res: x = 1
+                    if "Court" in res: y = -1
+                    if "Long" in res: y = 1
+                    return x + np.random.normal(0,0.1), y + np.random.normal(0,0.1)
+                
+                coords = df_putt.apply(get_coords, axis=1, result_type='expand')
+                fig, ax = plt.subplots()
+                ax.scatter(coords[0], coords[1], c='purple', s=100, alpha=0.6)
+                ax.axhline(0, c='gray'); ax.axvline(0, c='gray')
+                ax.set_xlim(-2,2); ax.set_ylim(-2,2)
+                ax.set_xlabel("Gauche <-> Droite"); ax.set_ylabel("Court <-> Long")
+                st.pyplot(fig)
+                
+            with c_p2:
+                st.subheader("Détail")
+                counts = df_putt['resultat_putt'].value_counts()
+                st.bar_chart(counts)
+                
+            st.subheader("Tableau par Distance")
+            df_putt['Dist_Zone'] = pd.cut(df_putt['strat_dist'], bins=[0, 2, 5, 10, 30], labels=["0-2m", "2-5m", "5-10m", "+10m"])
+            df_putt['Success'] = df_putt['resultat_putt'] == "Dans le trou"
+            piv = df_putt.groupby('Dist_Zone', observed=False)['Success'].mean() * 100
+            st.dataframe(piv.to_frame("% Réussite").style.background_gradient(cmap="Greens"), use_container_width=True)
