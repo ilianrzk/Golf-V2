@@ -6,16 +6,17 @@ import seaborn as sns
 from matplotlib.patches import Ellipse
 import datetime
 
-# Configuration de la page
+# --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="GolfShot 11.0 Fusion Ultimate", layout="wide")
 
-# --- GESTION DES DONNÉES ---
+# --- GESTION DE L'ÉTAT (DONNÉES) ---
 if 'coups' not in st.session_state:
     st.session_state['coups'] = []
 
 def convert_df(df):
     return df.to_csv(index=False).encode('utf-8')
 
+# --- CONSTANTES ---
 CLUBS_ORDER = [
     "Driver", "Bois 5", "Hybride", 
     "Fer 3", "Fer 5", "Fer 6", "Fer 7", "Fer 8", "Fer 9", 
@@ -29,7 +30,7 @@ DIST_REF = {
     "PW": 110, "50°": 100, "55°": 90, "60°": 80, "Putter": 3
 }
 
-# --- SIDEBAR : GÉNÉRATEUR FUSIONNÉ (V9 + V10) ---
+# --- BARRE LATÉRALE : GÉNÉRATEUR DE DONNÉES (V9 + V10) ---
 st.sidebar.title("⚙️ Data Lab")
 
 if st.sidebar.button("Générer Dataset V11 (Fusion)"):
@@ -37,7 +38,7 @@ if st.sidebar.button("Générer Dataset V11 (Fusion)"):
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(30)]
     
     for _ in range(300):
-        # Paramètres de base
+        # Paramètres de base aléatoires
         club = np.random.choice(["Driver", "Fer 7", "PW", "55°"])
         mode = np.random.choice(["Practice", "Parcours"], p=[0.3, 0.7])
         
@@ -86,10 +87,8 @@ if st.sidebar.button("Générer Dataset V11 (Fusion)"):
 
         new_data.append({
             'date': str(np.random.choice(dates)), 'mode': mode, 'club': club,
-            # Intention (V9+V10)
-            'strat_dist': int(dist_target), 'strat_effet': strat_effet, 'amplitude': ampli,
-            # Réalité (V9+V10)
-            'distance': round(dist_real, 1), 'lie': lie, 'real_effet': real_effet,
+            'strat_dist': int(dist_target), 'strat_effet': strat_effet, 'amplitude': ampli, # Intention
+            'distance': round(dist_real, 1), 'lie': lie, 'real_effet': real_effet,          # Réalité
             'direction': direction, 'score_lateral': lat_score,
             'delta_dist': delta, 'err_longueur': err_L, 'contact': np.random.choice(["Bon", "Gratte"]),
             'type_coup': 'Jeu Long'
@@ -180,7 +179,7 @@ with tab_saisie:
         })
         st.success("Données sauvegardées !")
 
-# --- ANALYSES ---
+# --- PRÉPARATION ANALYSE ---
 if st.session_state['coups']:
     df = pd.DataFrame(st.session_state['coups'])
     df_long = df[df['type_coup'] == 'Jeu Long']
@@ -197,13 +196,18 @@ with tab_tech:
         df_viz = df_long if f_ampli == "Tout" else df_long[df_long['amplitude'] == f_ampli]
         
         # Tableau Croisé Lie vs Club
-        pivot_lie = pd.pivot_table(df_viz, values='distance', index='club', columns='lie', aggfunc='mean').round(1)
-        # Tri logique
-        valid_clubs = [c for c in CLUBS_ORDER if c in pivot_lie.index]
-        pivot_lie = pivot_lie.reindex(valid_clubs)
-        
-        st.dataframe(pivot_lie.style.background_gradient(cmap="YlGnBu", axis=None).format("{:.1f}m"), use_container_width=True)
-        st.caption(f"Distances moyennes pour les coups : {f_ampli}")
+        try:
+            pivot_lie = pd.pivot_table(df_viz, values='distance', index='club', columns='lie', aggfunc='mean').round(1)
+            # Tri logique
+            valid_clubs = [c for c in CLUBS_ORDER if c in pivot_lie.index]
+            pivot_lie = pivot_lie.reindex(valid_clubs)
+            
+            st.dataframe(pivot_lie.style.background_gradient(cmap="YlGnBu", axis=None).format("{:.1f}m"), use_container_width=True)
+            st.caption(f"Distances moyennes pour les coups : {f_ampli}")
+        except:
+            st.warning("Pas assez de données variées pour créer le tableau croisé.")
+    else:
+        st.info("En attente de données...")
 
 # --- ONGLET 3 : DISPERSION (V9 Focus) ---
 with tab_strat:
@@ -253,11 +257,9 @@ with tab_strat:
                 ax.legend()
                 ax.autoscale()
                 st.pyplot(fig)
-                
-
-[Image of box plot chart explanation]
-
                 st.info("Ellipse Rouge (Parcours) vs Bleue (Practice). Une ellipse rouge 'large' indique un problème de face de club sous pression.")
+            else:
+                st.warning("Pas assez de données pour ce club.")
 
 # --- ONGLET 4 : RATÉS & GAP (Mix V9/V10) ---
 with tab_fail:
