@@ -7,7 +7,7 @@ from matplotlib.patches import Ellipse, Circle
 import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 27.0 Practice Master", layout="wide")
+st.set_page_config(page_title="GolfShot 28.0 Custom Course", layout="wide")
 
 # --- CSS ---
 st.markdown("""
@@ -26,12 +26,20 @@ if 'parties' not in st.session_state:
 if 'combine_state' not in st.session_state:
     st.session_state['combine_state'] = None
 
-# Carte de score active
+# CONFIGURATION CARTE DE SCORE (Personnalisée)
+# Par 3 : 2, 7, 12, 15
+# Par 5 : 3, 9, 18
+# Par 4 : Reste
+DEFAULT_PARS = [4, 3, 5, 4, 4, 4, 3, 4, 5, 4, 4, 3, 4, 4, 3, 4, 4, 5]
+
 if 'current_card' not in st.session_state:
     st.session_state['current_card'] = pd.DataFrame({
         'Trou': range(1, 19),
-        'Par': [4]*18, 'Score': [0]*18, 'Putts': [0]*18
+        'Par': DEFAULT_PARS, 
+        'Score': [0]*18, 
+        'Putts': [0]*18
     })
+    
 if 'current_hole' not in st.session_state: st.session_state['current_hole'] = 1
 if 'shots_on_current_hole' not in st.session_state: st.session_state['shots_on_current_hole'] = 0
 if 'putts_on_current_hole' not in st.session_state: st.session_state['putts_on_current_hole'] = 0
@@ -81,7 +89,7 @@ if uploaded_file is not None:
 
 st.sidebar.markdown("---")
 
-if st.sidebar.button("Générer Données V27 (Test)"):
+if st.sidebar.button("Générer Données V28 (Test)"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(30)]
     
@@ -120,11 +128,11 @@ if st.sidebar.button("Générer Données V27 (Test)"):
         new_data.append(base_entry)
             
     st.session_state['coups'].extend(new_data)
-    st.sidebar.success("Données V27 générées !")
+    st.sidebar.success("Données V28 générées !")
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v27.csv", "text/csv")
+    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v28.csv", "text/csv")
 
 if st.sidebar.button("🗑️ Reset Tout"): 
     st.session_state['coups'] = []
@@ -133,11 +141,13 @@ if st.sidebar.button("🗑️ Reset Tout"):
     st.session_state['current_hole'] = 1
     st.session_state['shots_on_current_hole'] = 0
     st.session_state['putts_on_current_hole'] = 0
-    st.session_state['current_card']['Score'] = 0
-    st.session_state['current_card']['Putts'] = 0
+    st.session_state['current_card'] = pd.DataFrame({
+        'Trou': range(1, 19),
+        'Par': DEFAULT_PARS, 'Score': [0]*18, 'Putts': [0]*18
+    })
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 27.0 : Practice Master")
+st.title("🏌️‍♂️ GolfShot 28.0 : Custom Course")
 
 tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt = st.tabs([
     "⛳ Parcours & Score", 
@@ -301,7 +311,7 @@ with tab_parcours:
             st.success("Sauvegardé !")
 
 # ==================================================
-# ONGLET 2 : PRACTICE (MODIFIÉ)
+# ONGLET 2 : PRACTICE (COMPLET V27)
 # ==================================================
 with tab_practice:
     st.header("🚜 Practice Libre")
@@ -309,19 +319,16 @@ with tab_practice:
     
     with c_pr1: 
         club_pr = st.selectbox("Club", CLUBS_ORDER, key="pr_club")
-        # AJOUT : Contact
         contact_pr = st.selectbox("Contact", ["Bon", "Gratte", "Top", "Pointe", "Talon"], key="pr_cont")
         
     with c_pr2: 
         obj_pr = st.number_input("Cible (m)", 0, 300, DIST_REF.get(club_pr, 100), key="pr_obj")
         dist_pr = st.number_input("Réalisé (m)", 0, 300, int(obj_pr), key="pr_real")
-        # AJOUT : Effet Voulu
         strat_eff_pr = st.selectbox("Effet Voulu", ["Tout droit", "Fade", "Draw", "Balle Basse"], key="pr_eff_v")
         
     with c_pr3:
         dir_pr = st.radio("Direction", ["Gauche", "Centre", "Droite"], key="pr_dir")
         lat_pr = st.slider("Dispersion", 0, 5, 0, key="pr_lat")
-        # AJOUT : Effet Réalisé
         real_eff_pr = st.selectbox("Effet Réalisé", ["Tout droit", "Fade", "Draw", "Push", "Pull", "Hook", "Slice"], key="pr_eff_r")
 
     if st.button("Enregistrer Practice"):
@@ -379,7 +386,6 @@ with tab_combine:
         df = pd.DataFrame(st.session_state['coups'])
         df_c = df[df['mode'] == 'Combine']
         if not df_c.empty:
-            # SCORE SUR 100
             score_avg = df_c['points_test'].mean()
             st.metric("Score Moyen Combine", f"{score_avg:.0f} / 100")
             
@@ -430,7 +436,7 @@ with tab_dna:
                 st.dataframe(res.to_frame("% Réussite").style.background_gradient(cmap="Greens"), use_container_width=True)
 
 # ==================================================
-# ONGLET 5 : BAG MAPPING (COULEURS)
+# ONGLET 5 : BAG MAPPING
 # ==================================================
 with tab_sac:
     if st.session_state['coups']:
@@ -447,7 +453,6 @@ with tab_sac:
             stats = df_s.groupby('club', observed=True)['distance'].agg(['count', 'mean', 'max', 'std']).round(1)
             stats.columns = ['Nb Coups', 'Moyenne (m)', 'Max (m)', 'Écart Type (m)']
             
-            # COULEURS SÉMANTIQUES
             st.dataframe(
                 stats.style.background_gradient(cmap="Blues", subset=['Moyenne (m)', 'Max (m)'])
                            .background_gradient(cmap="RdYlGn_r", subset=['Écart Type (m)']), 
@@ -455,7 +460,7 @@ with tab_sac:
             )
 
 # ==================================================
-# ONGLET 6 : PUTTING (TABLEAU + COULEURS)
+# ONGLET 6 : PUTTING
 # ==================================================
 with tab_putt:
     if st.session_state['coups']:
@@ -465,7 +470,6 @@ with tab_putt:
         if not df_p.empty:
             st.header("🟢 Analyse Putting")
             
-            # STATS PAR ZONE (COULEURS)
             st.subheader("📊 Réussite par Zone")
             df_p['Zone'] = pd.cut(df_p['strat_dist'], bins=[0, 2, 5, 10, 30], labels=["0-2m", "2-5m", "5-10m", "+10m"])
             df_p['Success'] = df_p['resultat_putt'] == "Dans le trou"
@@ -475,7 +479,6 @@ with tab_putt:
                 Reussites=('Success', 'sum')
             )
             piv['% Réussite'] = (piv['Reussites'] / piv['Tentatives'] * 100).round(1)
-            # COULEUR : Vert = Bon %
             st.dataframe(piv.style.background_gradient(cmap="RdYlGn", subset=['% Réussite']), use_container_width=True)
 
             c1, c2 = st.columns(2)
