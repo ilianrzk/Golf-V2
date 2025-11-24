@@ -6,10 +6,10 @@ import seaborn as sns
 from matplotlib.patches import Ellipse
 import datetime
 
-# --- CONFIGURATION ---
+# --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(page_title="GolfShot 13.0 Mastery", layout="wide")
 
-# --- CSS ---
+# --- STYLES CSS PERSONNALISÉS ---
 st.markdown("""
 <style>
     .metric-card {background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;}
@@ -17,13 +17,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- DONNÉES & CONSTANTES ---
+# --- GESTION DES DONNÉES (STATE) ---
 if 'coups' not in st.session_state:
     st.session_state['coups'] = []
 
 def convert_df(df):
     return df.to_csv(index=False).encode('utf-8')
 
+# --- CONSTANTES ---
 CLUBS_ORDER = [
     "Driver", "Bois 5", "Hybride", 
     "Fer 3", "Fer 5", "Fer 6", "Fer 7", "Fer 8", "Fer 9", 
@@ -37,7 +38,7 @@ DIST_REF = {
     "PW": 110, "50°": 100, "55°": 90, "60°": 80, "Putter": 3
 }
 
-# --- GÉNÉRATEUR V13 ---
+# --- BARRE LATÉRALE : GÉNÉRATEUR V13 ---
 st.sidebar.title("⚙️ Data Lab V13")
 
 if st.sidebar.button("Générer Dataset 'Mastery'"):
@@ -100,7 +101,7 @@ if st.session_state['coups']:
     
 if st.sidebar.button("🗑️ Reset"): st.session_state['coups'] = []
 
-# --- INTERFACE ---
+# --- INTERFACE PRINCIPALE ---
 st.title("🏌️‍♂️ GolfShot 13.0 : Mastery")
 
 tab_saisie, tab_sac, tab_dna = st.tabs(["📝 Saisie Complète", "🎒 Bag Mapping & Gapping", "🧬 Analyse Club & Lie"])
@@ -161,7 +162,7 @@ with tab_saisie:
         })
         st.success("Coup enregistré !")
 
-# --- DATA PREP ---
+# --- PRÉPARATION DES DONNÉES ---
 if st.session_state['coups']:
     df = pd.DataFrame(st.session_state['coups'])
     df_long = df[df['type_coup'] == 'Jeu Long']
@@ -192,7 +193,7 @@ with tab_sac:
             
             st.markdown("---")
             
-            # --- 2. TABLEAU DE DONNÉES PRÉCISES (AJOUT MAJEUR) ---
+            # --- 2. TABLEAU DE DONNÉES PRÉCISES ---
             st.subheader("🔢 Données Chiffrées par Club")
             
             # Calculs Stats
@@ -259,12 +260,12 @@ with tab_dna:
                     sns.boxplot(x='lie', y='distance', data=df_club, ax=ax_lie, palette="Set2")
                     st.pyplot(fig_lie)
                 
-                # 2. Tableau Data (NOUVEAU)
+                # 2. Tableau Data
                 st.write("**Pertes de distance par Lie**")
                 pivot_lie = df_club.groupby('lie')['distance'].agg(['mean', 'count']).round(1)
                 
-                # Calcul % par rapport au Tee ou Fairway (Reference)
-                ref_dist = pivot_lie['mean'].max() # On prend la meilleure situation comme ref
+                # Calcul % par rapport au Max (Reference)
+                ref_dist = pivot_lie['mean'].max() 
                 pivot_lie['% du Max'] = (pivot_lie['mean'] / ref_dist * 100).round(0)
                 pivot_lie['Perte (m)'] = (ref_dist - pivot_lie['mean']).round(1)
                 
@@ -301,8 +302,4 @@ with tab_dna:
                     ax_scat.add_artist(ell)
                 
                 st.pyplot(fig_scat)
-                
-
-[Image of box plot chart explanation]
-
                 st.caption("L'ellipse rouge montre votre zone de dispersion principale (95%).")
