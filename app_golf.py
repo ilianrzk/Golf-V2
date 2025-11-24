@@ -10,7 +10,7 @@ from fpdf import FPDF
 import io
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 35.1 Coach Report Fixed", layout="wide")
+st.set_page_config(page_title="GolfShot 35.0 Live Sync", layout="wide")
 
 # --- CSS ---
 st.markdown("""
@@ -26,7 +26,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- FONCTION MANQUANTE (CORRECTION) ---
+# --- FONCTION UTILITAIRE (Celle qui manquait avant) ---
 def convert_df(df):
     return df.to_csv(index=False).encode('utf-8')
 
@@ -55,11 +55,7 @@ def add_coup_to_db(data):
     for k in keys:
         if k not in data: data[k] = None
     c = conn.cursor()
-    # On utilise une requête paramétrée sécurisée
     placeholders = ','.join([':' + k for k in keys])
-    columns = ','.join(keys)
-    # Note: SQLite accepte INSERT INTO table VALUES (...) si l'ordre correspond
-    # Ici on va simplifier pour correspondre à la structure table créée
     c.execute(f'''INSERT INTO coups VALUES ({placeholders})''', data)
     conn.commit()
 
@@ -101,7 +97,6 @@ def create_pro_pdf(df_coups, df_parties):
     pdf = PDF()
     pdf.add_page()
     
-    # --- 1. RESUME ---
     pdf.chapter_title("1. RESUME DE PERFORMANCE")
     nb_total = len(df_coups)
     if not df_parties.empty:
@@ -113,7 +108,6 @@ def create_pro_pdf(df_coups, df_parties):
         txt_score = "Aucune partie complete enregistree."
     pdf.chapter_body(f"Volume de jeu analyse : {nb_total} coups.\n{txt_score}")
     
-    # --- 2. GAPPING ---
     pdf.chapter_title("2. TABLEAU D'ETALONNAGE (GAPPING)")
     pdf.set_font('Arial', 'B', 10)
     pdf.cell(30, 8, 'Club', 1); pdf.cell(30, 8, 'Moyenne', 1); pdf.cell(30, 8, 'Max', 1); pdf.cell(30, 8, 'Dispersion', 1); pdf.cell(40, 8, 'Efficacite', 1); pdf.ln()
@@ -132,37 +126,21 @@ def create_pro_pdf(df_coups, df_parties):
             pdf.cell(30, 8, str(club), 1); pdf.cell(30, 8, f"{avg:.1f}m", 1); pdf.cell(30, 8, f"{maxx:.1f}m", 1); pdf.cell(30, 8, f"+/- {std:.1f}", 1); pdf.cell(40, 8, f"{eff:.0f}%", 1); pdf.ln()
     
     pdf.ln(5)
-
-    # --- 3. FAUTES ---
-    pdf.chapter_title("3. DIAGNOSTIC DES FAUTES")
+    pdf.chapter_title("3. DIAGNOSTIC")
     pdf.set_font('Arial', '', 11)
     if not df_long.empty:
         miss_L = df_long[df_long['err_longueur'] != 'Bonne Longueur']
         if not miss_L.empty:
-            top_L = miss_L['err_longueur'].mode()[0]
-            pdf.cell(0, 8, f">> Tendance Longueur : {top_L}", 0, 1)
-        
-        miss_Lat = df_long[df_long['direction'] != 'Centre']
-        if not miss_Lat.empty:
-            top_Lat = miss_Lat['direction'].mode()[0]
-            pdf.cell(0, 8, f">> Tendance Laterale : {top_Lat}", 0, 1)
-
-    # --- 4. PUTTING ---
-    pdf.chapter_title("4. PERFORMANCE PUTTING")
-    df_putt = df_coups[df_coups['type_coup'] == 'Putt'].copy()
-    if not df_putt.empty:
-        misses = df_putt[df_putt['resultat_putt'] != "Dans le trou"]
-        if not misses.empty:
-            top_miss = misses['resultat_putt'].mode()[0]
-            pdf.multi_cell(0, 5, f"Faute dominante au putting : {top_miss}.")
-
+            try:
+                top_L = miss_L['err_longueur'].mode()[0]
+                pdf.cell(0, 8, f">> Tendance Longueur : {top_L}", 0, 1)
+            except: pass
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
-# --- ETAT (CHARGEMENT DB) ---
-if 'coups' not in st.session_state or not st.session_state['coups']:
-    st.session_state['coups'] = load_coups_from_db().to_dict('records')
-if 'parties' not in st.session_state or not st.session_state['parties']:
-    st.session_state['parties'] = load_parties_from_db().to_dict('records')
+# --- ETAT (CHARGEMENT SYNC DB) ---
+# On recharge systématiquement pour être à jour
+st.session_state['coups'] = load_coups_from_db().to_dict('records')
+st.session_state['parties'] = load_parties_from_db().to_dict('records')
 
 if 'combine_state' not in st.session_state: st.session_state['combine_state'] = None
 
@@ -184,22 +162,21 @@ DIST_REF = {"Driver": 220, "Bois 5": 200, "Hybride": 180, "Fer 3": 170, "Fer 5":
 # ==================================================
 st.sidebar.title("⚙️ Data Lab")
 
-# 1. IMPORT
-uploaded_file = st.sidebar.file_uploader("📂 Importer CSV (Backup)", type="csv")
+uploaded_file = st.sidebar.file_uploader("📂 Importer CSV", type="csv")
 if uploaded_file is not None:
     try:
         df_loaded = pd.read_csv(uploaded_file)
         for _, row in df_loaded.iterrows():
             add_coup_to_db(row.to_dict())
-        st.session_state['coups'] = load_coups_from_db().to_dict('records')
-        st.sidebar.success("Importé !")
+        st.sidebar.success("Données importées !")
         st.rerun()
     except Exception as e: st.sidebar.error(f"Erreur : {e}")
 
 st.sidebar.markdown("---")
 
-# 2. FILTRE TEMPOREL
+# 2. FILTRE TEMPOREL (ELARGI PAR DEFAUT POUR VOIR LES DONNEES TEST)
 st.sidebar.header("📅 Filtre Temporel")
+# Fix: Date de début par défaut = 1er Janvier de l'année
 default_start = datetime.date(datetime.date.today().year, 1, 1)
 filter_start = st.sidebar.date_input("Du", default_start)
 filter_end = st.sidebar.date_input("Au", datetime.date.today())
@@ -207,19 +184,21 @@ filter_end = st.sidebar.date_input("Au", datetime.date.today())
 df_analysis = pd.DataFrame()
 if st.session_state['coups']:
     df_raw = pd.DataFrame(st.session_state['coups'])
-    df_raw['date_dt'] = pd.to_datetime(df_raw['date']).dt.date
-    df_analysis = df_raw[(df_raw['date_dt'] >= filter_start) & (df_raw['date_dt'] <= filter_end)]
-    st.sidebar.caption(f"{len(df_analysis)} coups analysés.")
+    if 'date' in df_raw.columns:
+        df_raw['date_dt'] = pd.to_datetime(df_raw['date']).dt.date
+        df_analysis = df_raw[(df_raw['date_dt'] >= filter_start) & (df_raw['date_dt'] <= filter_end)]
+        st.sidebar.caption(f"{len(df_analysis)} coups analysés.")
+    else:
+        st.sidebar.warning("Erreur structure de date.")
 
 # 3. RAPPORT PDF
-if st.sidebar.button("📄 Télécharger Rapport Coach"):
+if st.sidebar.button("📄 Générer Rapport Coach"):
     if not df_analysis.empty:
         try:
             pdf_bytes = create_pro_pdf(df_analysis, pd.DataFrame(st.session_state['parties']))
-            st.sidebar.download_button("📥 PDF Ready", pdf_bytes, "Rapport_Coach_Golf.pdf", "application/pdf")
-        except Exception as e:
-            st.sidebar.error(f"Erreur PDF (Vérifiez que fpdf est installé) : {e}")
-    else: st.sidebar.error("Pas de données.")
+            st.sidebar.download_button("📥 Télécharger PDF", pdf_bytes, "Rapport_Golf.pdf", "application/pdf")
+        except Exception as e: st.sidebar.error(f"Erreur PDF : {e}")
+    else: st.sidebar.error("Pas de données sur la période.")
 
 st.sidebar.markdown("---")
 
@@ -228,6 +207,7 @@ st.sidebar.header("🤖 Smart Caddie")
 with st.sidebar.expander("Assistant", expanded=True):
     cad_dist = st.number_input("Distance (m)", 50, 250, 135, step=5)
     cad_lie = st.selectbox("Lie", ["Tee", "Fairway", "Rough", "Bunker"])
+    
     if not df_analysis.empty:
         df_caddie = df_analysis[df_analysis['type_coup'] == 'Jeu Long']
         df_lie = df_caddie[df_caddie['lie'] == cad_lie]
@@ -240,8 +220,8 @@ with st.sidebar.expander("Assistant", expanded=True):
                 rec = best.iloc[0]
                 st.markdown(f"<div class='caddie-box'>💡 {rec['club']}<br><small>Moy: {rec['distance']:.1f}m</small></div>", unsafe_allow_html=True)
             else: st.warning("?")
-        else: st.warning("Données insuf.")
-    else: st.warning("Données requises.")
+        else: st.warning("Manque de données")
+    else: st.warning("Données requises")
 
 st.sidebar.markdown("---")
 if st.sidebar.button("Injecter Données Test V35"):
@@ -266,12 +246,12 @@ if st.sidebar.button("Injecter Données Test V35"):
             r = np.random.normal(t, 10)
             entry.update({'strat_dist': t, 'distance': r, 'score_lateral': np.random.randint(0,3), 'type_coup': 'Jeu Long'})
         add_coup_to_db(entry)
-    st.session_state['coups'] = load_coups_from_db().to_dict('records')
+    
     st.sidebar.success("Données injectées !")
+    st.rerun() # REFRESH IMMEDIAT
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    # C'est ici que la fonction convert_df est appelée
     st.sidebar.download_button("📥 Backup CSV", convert_df(df_ex), "golf_v35_backup.csv", "text/csv")
 
 if st.sidebar.button("⚠️ Vider DB"):
@@ -279,7 +259,7 @@ if st.sidebar.button("⚠️ Vider DB"):
     st.session_state['coups'] = []; st.session_state['parties'] = []; st.rerun()
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 35.1 : Coach Report Edition")
+st.title("🏌️‍♂️ GolfShot 35.0 : Live Sync & PDF")
 
 tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt = st.tabs([
     "⛳ Parcours", "🚜 Practice", "🏆 Combine", "🧬 Club DNA", "🎒 Mapping", "🟢 Putting"
@@ -362,21 +342,14 @@ with tab_parcours:
                 'points_test': 0, 'amplitude': 'Plein', 'contact': 'Bon', 'dist_remain': 0
             }
             add_coup_to_db(data)
-            st.session_state['coups'].append(data)
             
             st.session_state['shots_on_current_hole'] += 1
             if club == "Putter": st.session_state['putts_on_current_hole'] += 1
-            idx = st.session_state['current_hole'] - 1
-            st.session_state['current_card'].at[idx, 'Score'] = st.session_state['shots_on_current_hole']
-            st.session_state['current_card'].at[idx, 'Putts'] = st.session_state['putts_on_current_hole']
+            st.session_state['current_card'].at[idx_hole, 'Score'] = st.session_state['shots_on_current_hole']
+            st.session_state['current_card'].at[idx_hole, 'Putts'] = st.session_state['putts_on_current_hole']
             
-            if res_putt == "Dans le trou":
-                st.balloons()
-                st.session_state['shots_on_current_hole'] = 0
-                st.session_state['putts_on_current_hole'] = 0
-                if st.session_state['current_hole'] < 18: st.session_state['current_hole'] += 1
-                st.rerun()
-            else: st.success("Sauvegardé !")
+            st.success("Sauvegardé !")
+            st.rerun() # REFRESH IMMEDIAT POUR GRAPHS
 
         c_p, c_n = st.columns(2)
         if c_p.button("<< Préc"):
@@ -399,8 +372,8 @@ with tab_parcours:
         if st.button("💾 Sauvegarder Partie"):
             p_data = {'date': str(datetime.date.today()), 'score': int(tot), 'putts': int(played['Putts'].sum())}
             add_partie_to_db(p_data)
-            st.session_state['parties'].append(p_data)
             st.success("Partie archivée !")
+            st.rerun()
 
 # ==================================================
 # ONGLET 2 : PRACTICE
@@ -431,20 +404,60 @@ with tab_practice:
             'par_trou': 0, 'points_test': 0, 'amplitude': 'Plein', 'dist_remain': 0
         }
         add_coup_to_db(data)
-        st.session_state['coups'].append(data)
         st.success("Sauvegardé !")
+        st.rerun()
 
 # ==================================================
-# ANALYSES (UTILISENT df_analysis)
+# ONGLET 3 : COMBINE
 # ==================================================
 with tab_combine:
-    st.header("🏆 Combine Analytics")
+    st.header("🏆 Combine")
+    if st.button("🎲 Lancer"):
+        cands = [c for c in CLUBS_ORDER if c != "Putter"]
+        sels = np.random.choice(cands, 3, replace=False)
+        targs = [{'club': c, 'target': DIST_REF[c] + np.random.randint(-5, 6)} for c in sels]
+        st.session_state['combine_state'] = {'clubs_info': targs, 'current_club_idx': 0, 'current_shot': 1, 'score_total': 0}
+        st.rerun()
+
+    stt = st.session_state['combine_state']
+    if stt and stt['current_club_idx'] < 3:
+        inf = stt['clubs_info'][stt['current_club_idx']]
+        st.info(f"Club : {inf['club']} | Cible : {inf['target']}m | Balle {stt['current_shot']}/5")
+        c1, c2 = st.columns(2)
+        with c1: dc = st.number_input("Distance", 0, 350, inf['target'], key="cd")
+        with c2: lc = st.slider("Dispersion", 0, 5, 0, key="cl")
+        if st.button("Valider"):
+            pts = max(0, 50 - (abs(dc - inf['target'])*2)) + max(0, 50 - (lc*10))
+            data = {
+                'date': str(datetime.date.today()), 'mode': 'Combine', 'club': inf['club'],
+                'strat_dist': inf['target'], 'distance': dc, 'score_lateral': lc,
+                'direction': 'Centre' if lc==0 else 'Gauche', 'type_coup': 'Jeu Long',
+                'points_test': pts, 'resultat_putt': 'N/A', 'delta_dist': dc-inf['target'],
+                'lie': 'Practice', 'strat_type': 'Combine', 'par_trou': 0, 
+                'strat_effet': 'N/A', 'real_effet': 'N/A', 'amplitude': 'Plein', 'contact': 'Bon', 'dist_remain': 0, 'err_longueur': 'Ok'
+            }
+            add_coup_to_db(data)
+            stt['score_total'] += pts
+            if stt['current_shot'] < 5: stt['current_shot'] += 1
+            else: 
+                stt['current_shot'] = 1
+                stt['current_club_idx'] += 1
+            st.rerun()
+    elif stt:
+        st.success(f"Score : {int(stt['score_total']/15)}/100")
+        if st.button("Fermer"):
+            st.session_state['combine_state'] = None
+            st.rerun()
+            
+    st.markdown("---")
     if not df_analysis.empty:
         df_c = df_analysis[df_analysis['mode'] == 'Combine']
         if not df_c.empty:
             st.metric("Score Moyen", f"{df_c['points_test'].mean():.0f}/100")
-        else: st.info("Pas de données Combine.")
 
+# ==================================================
+# ANALYSES (UTILISENT df_analysis FILTRÉ)
+# ==================================================
 with tab_dna:
     st.header("🧬 Club DNA")
     if not df_analysis.empty:
@@ -482,3 +495,23 @@ with tab_putt:
             df_p['Zone'] = pd.cut(df_p['strat_dist'], [0,2,5,10,30], labels=["0-2m","2-5m","5-10m","+10m"])
             piv = df_p.groupby('Zone', observed=False).apply(lambda x: (x['resultat_putt']=="Dans le trou").mean()*100)
             st.dataframe(piv.to_frame("%").style.background_gradient(cmap="RdYlGn"), use_container_width=True)
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                def get_pc(r):
+                    res = r['resultat_putt']
+                    if "Dans" in res: return 0,0
+                    x, y = 0, 0
+                    if "Gauche" in res: x = -1
+                    if "Droite" in res: x = 1
+                    if "Court" in res: y = -1
+                    if "Long" in res: y = 1
+                    return x + np.random.normal(0,0.1), y + np.random.normal(0,0.1)
+                coords = df_p.apply(get_pc, axis=1, result_type='expand')
+                fig, ax = plt.subplots()
+                ax.scatter(coords[0], coords[1], alpha=0.5, s=100, c='purple')
+                ax.axhline(0, c='gray'); ax.axvline(0, c='gray')
+                st.pyplot(fig)
+            with c2:
+                misses = df_p[df_p['resultat_putt'] != "Dans le trou"]
+                if not misses.empty: st.bar_chart(misses['resultat_putt'].value_counts())
