@@ -207,10 +207,6 @@ with tab_analyse:
                 ax.grid(True, alpha=0.3)
                 ax.autoscale()
                 st.pyplot(fig)
-                
-
-[Image of box plot chart explanation]
- 
                 st.caption("Les ellipses représentent la zone où 95% de vos balles atterrissent.")
             else:
                 st.warning("Pas assez de données pour ce club (min 3 coups).")
@@ -255,7 +251,6 @@ with tab_analyse:
             
             if not df_effets.empty:
                 # Vérification de succès : Si j'ai demandé Draw et j'ai eu Draw
-                # Note : Dans une vraie app, on affinerait (ex: Draw demandé, Hook réalisé = Raté)
                 df_effets['succes'] = df_effets.apply(lambda x: x['strat_effet'] in x['real_effet'], axis=1)
                 
                 success_rate = df_effets.groupby('strat_effet')['succes'].mean() * 100
