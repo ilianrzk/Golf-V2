@@ -7,7 +7,7 @@ from matplotlib.patches import Ellipse, Circle
 import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="Golf Deep Data", layout="wide")
+st.set_page_config(page_title="GolfShot 20.0 True Score", layout="wide")
 
 # --- CSS ---
 st.markdown("""
@@ -69,8 +69,8 @@ if uploaded_file is not None:
 
 st.sidebar.markdown("---")
 
-# 2. GÉNÉRATEUR V19
-if st.sidebar.button("Générer Données Test V19"):
+# 2. GÉNÉRATEUR V20
+if st.sidebar.button("Générer Données Test V20"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(60)]
     
@@ -139,17 +139,17 @@ if st.sidebar.button("Générer Données Test V19"):
             })
             
     st.session_state['coups'].extend(new_data)
-    st.sidebar.success("Données V19 générées !")
+    st.sidebar.success("Données V20 générées !")
 
 # 3. EXPORT CSV
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v19.csv", "text/csv")
+    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v20.csv", "text/csv")
     
 if st.sidebar.button("🗑️ Reset Tout"): st.session_state['coups'] = []
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 19.0 : Deep Data")
+st.title("🏌️‍♂️ GolfShot 20.0 : True Score")
 
 tab_saisie, tab_dual, tab_sac, tab_putt = st.tabs([
     "📝 Saisie", 
@@ -165,6 +165,7 @@ def plot_dispersion_ellipse(ax, data, title, color_main):
         return
 
     def get_x(row):
+        # Pour le graph, on spatialise quand même (x5) pour que ce soit visible
         x = row['score_lateral'] * 5 
         if row['direction'] == 'Gauche': return -x
         if row['direction'] == 'Droite': return x
@@ -290,23 +291,14 @@ with tab_dual:
         df_practice = df_c[df_c['mode'] == 'Practice']
         df_parcours = df_c[df_c['mode'] == 'Parcours']
         
-        def calc_lat_disp(d):
-            if d.empty: return 0
-            lats = []
-            for _, r in d.iterrows():
-                val = r['score_lateral'] * 5
-                if r['direction'] == 'Gauche': val = -val
-                if r['direction'] == 'Centre': val = 0
-                lats.append(val)
-            return np.std(lats)
-
         with col_prac:
             fig1, ax1 = plt.subplots(figsize=(5, 5))
             plot_dispersion_ellipse(ax1, df_practice, "Practice (Labo)", "blue")
             st.pyplot(fig1)
             if not df_practice.empty:
-                # MODIFICATION : AJOUT DISPERSION PROFONDEUR
-                st.metric("Dispersion Latérale", f"± {calc_lat_disp(df_practice):.1f}m")
+                # MODIFICATION ICI : Score sur 5
+                lat_score_mean = df_practice['score_lateral'].mean()
+                st.metric("Score Latéral Moyen", f"{lat_score_mean:.1f} / 5")
                 st.metric("Dispersion Profondeur", f"± {df_practice['distance'].std():.1f}m")
 
         with col_parc:
@@ -314,8 +306,9 @@ with tab_dual:
             plot_dispersion_ellipse(ax2, df_parcours, "Parcours (Réalité)", "red")
             st.pyplot(fig2)
             if not df_parcours.empty:
-                # MODIFICATION : AJOUT DISPERSION PROFONDEUR
-                st.metric("Dispersion Latérale", f"± {calc_lat_disp(df_parcours):.1f}m")
+                # MODIFICATION ICI : Score sur 5
+                lat_score_mean = df_parcours['score_lateral'].mean()
+                st.metric("Score Latéral Moyen", f"{lat_score_mean:.1f} / 5")
                 st.metric("Dispersion Profondeur", f"± {df_parcours['distance'].std():.1f}m")
         
         st.markdown("---")
@@ -327,13 +320,11 @@ with tab_dual:
         if not df_effets.empty:
             df_effets['Reussite'] = df_effets.apply(lambda x: 1 if x['strat_effet'] in x['real_effet'] else 0, axis=1)
             
-            # MODIFICATION : REMPLACEMENT GRAPH PAR TABLEAU
             summary_effets = df_effets.groupby('strat_effet').agg(
                 Tentatives=('strat_effet', 'count'),
                 Reussites=('Reussite', 'sum'),
                 Taux=('Reussite', 'mean')
             )
-            # Mise en forme
             summary_effets['Taux'] = (summary_effets['Taux'] * 100).round(1)
             summary_effets.columns = ['Tentatives', 'Réussites', '% Réussite']
             
