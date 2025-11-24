@@ -7,13 +7,13 @@ from matplotlib.patches import Ellipse
 import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 12.0 Club DNA", layout="wide")
+st.set_page_config(page_title="GolfShot 13.0 Mastery", layout="wide")
 
-# --- CSS POUR DASHBOARD ---
+# --- CSS ---
 st.markdown("""
 <style>
-    .metric-card {background-color: #f0f2f6; padding: 15px; border-radius: 10px; text-align: center;}
-    h3 {border-bottom: 2px solid #4CAF50; padding-bottom: 10px;}
+    .metric-card {background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;}
+    h4 {color: #4CAF50;}
 </style>
 """, unsafe_allow_html=True)
 
@@ -37,44 +37,39 @@ DIST_REF = {
     "PW": 110, "50°": 100, "55°": 90, "60°": 80, "Putter": 3
 }
 
-# --- GÉNÉRATEUR V12 (ULTRA COMPLET) ---
-st.sidebar.title("⚙️ Data Lab V12")
+# --- GÉNÉRATEUR V13 ---
+st.sidebar.title("⚙️ Data Lab V13")
 
-if st.sidebar.button("Générer Dataset 'Club DNA'"):
+if st.sidebar.button("Générer Dataset 'Mastery'"):
     new_data = []
-    # On simule sur 60 jours pour avoir une évolution temporelle
-    start_date = datetime.date.today() - datetime.timedelta(days=60)
+    dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(60)]
     
-    for i in range(400):
-        # Date progressive
-        current_date = start_date + datetime.timedelta(days=np.random.randint(0, 60))
-        
+    for _ in range(400):
         club = np.random.choice(["Driver", "Fer 7", "PW", "55°"])
-        mode = np.random.choice(["Practice", "Parcours"], p=[0.4, 0.6])
+        mode = np.random.choice(["Practice", "Parcours"], p=[0.3, 0.7])
         
-        # Logique V10/V11
-        if club in ["PW", "55°"]:
-            ampli = np.random.choice(["Plein", "3/4", "1/2"], p=[0.5, 0.3, 0.2])
-        else:
-            ampli = "Plein"
+        # Amplitude
+        if club in ["PW", "55°"]: ampli = np.random.choice(["Plein", "3/4", "1/2"], p=[0.5, 0.3, 0.2])
+        else: ampli = "Plein"
 
-        if mode == "Practice":
-            lie = "Tapis/Tee"
+        # Lie
+        if mode == "Practice": lie = "Tapis/Tee"
         else:
             if club == "Driver": lie = "Tee"
             else: lie = np.random.choice(["Fairway", "Rough", "Bunker"], p=[0.6, 0.3, 0.1])
+
+        # Intention (Effet)
+        strat_effet = np.random.choice(["Tout droit", "Fade", "Draw"], p=[0.7, 0.15, 0.15])
 
         # Calcul Distance
         dist_target = DIST_REF[club]
         if ampli == "3/4": dist_target *= 0.85
         if ampli == "1/2": dist_target *= 0.60
         
-        # Simulation Réalité & Evolution (Le joueur progresse un peu)
-        progress_factor = 1 + (i / 8000) # Légère augmentation dist
-        penalty_lie = 0.85 if lie == "Rough" else (0.70 if lie == "Bunker" else 1.0)
-        std_dev = 6 if mode == "Practice" else 14
-        
-        dist_real = np.random.normal(dist_target * penalty_lie * progress_factor, std_dev)
+        # Physique du coup
+        penalty = 0.88 if lie == "Rough" else (0.75 if lie == "Bunker" else 1.0)
+        std_dev = 6 if mode == "Practice" else 12
+        dist_real = np.random.normal(dist_target * penalty, std_dev)
         
         # Erreurs
         delta = dist_real - dist_target
@@ -82,37 +77,35 @@ if st.sidebar.button("Générer Dataset 'Club DNA'"):
         elif delta > 6: err_L = "Long"
         else: err_L = "Bonne Longueur"
         
-        # Latéral
         lat_score = abs(np.random.normal(0, 2))
         lat_score = min(5, int(lat_score))
         direction = "Centre" if lat_score == 0 else np.random.choice(["Gauche", "Droite"])
         
-        # Contact
-        contact = np.random.choice(["Bon", "Gratte", "Top", "Pointe"], p=[0.6, 0.2, 0.1, 0.1])
+        contact = np.random.choice(["Bon", "Gratte", "Top", "Pointe"], p=[0.65, 0.15, 0.1, 0.1])
 
         new_data.append({
-            'date': str(current_date), 'mode': mode, 'club': club,
-            'strat_dist': int(dist_target), 'amplitude': ampli, 
+            'date': str(np.random.choice(dates)), 'mode': mode, 'club': club,
+            'strat_dist': int(dist_target), 'strat_effet': strat_effet, 'amplitude': ampli, # Intention
             'distance': round(dist_real, 1), 'lie': lie, 'contact': contact,
             'direction': direction, 'score_lateral': lat_score,
             'delta_dist': delta, 'err_longueur': err_L,
             'type_coup': 'Jeu Long'
         })
     st.session_state['coups'].extend(new_data)
-    st.sidebar.success("400 Coups 'DNA' générés !")
+    st.sidebar.success("400 Coups générés !")
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Export CSV", convert_df(df_ex), "golf_v12.csv", "text/csv")
+    st.sidebar.download_button("📥 Export CSV", convert_df(df_ex), "golf_v13.csv", "text/csv")
     
 if st.sidebar.button("🗑️ Reset"): st.session_state['coups'] = []
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 12.0 : Club DNA")
+st.title("🏌️‍♂️ GolfShot 13.0 : Mastery")
 
-tab_saisie, tab_dna, tab_sac = st.tabs(["📝 Saisie Rapide", "🧬 Analyse Club 360°", "🎒 Mapping du Sac"])
+tab_saisie, tab_sac, tab_dna = st.tabs(["📝 Saisie Complète", "🎒 Bag Mapping & Gapping", "🧬 Analyse Club & Lie"])
 
-# --- ONGLET 1 : SAISIE (STANDARD V11) ---
+# --- ONGLET 1 : SAISIE ---
 with tab_saisie:
     col_m, col_c = st.columns(2)
     with col_m: mode = st.radio("Mode", ["Parcours ⛳", "Practice 🚜"], horizontal=True)
@@ -125,9 +118,12 @@ with tab_saisie:
         st.subheader("1️⃣ INTENTION")
         if club == "Putter":
             obj_dist = st.number_input("Dist. Cible", 0.0, 30.0, 3.0)
+            strat_effet = "Aucun"
             amplitude = "Plein"
         else:
             obj_dist = st.number_input("Dist. Cible", 0, 350, DIST_REF.get(club, 100))
+            # RETOUR DE L'EFFET SOUHAITÉ
+            strat_effet = st.selectbox("Effet Voulu", ["Tout droit", "Fade (G-D)", "Draw (D-G)", "Balle basse"])
             amplitude = st.radio("Amplitude", ["Plein", "3/4", "1/2"], horizontal=True)
 
     with col_real:
@@ -142,8 +138,7 @@ with tab_saisie:
         else:
             dist_real = st.number_input("Distance Réelle (m)", 0, 350, int(obj_dist))
             lie = st.selectbox("Situation (Lie)", ["Tee", "Fairway", "Rough", "Bunker"])
-            c_cont, c_dummy = st.columns(2)
-            with c_cont: contact = st.selectbox("Contact", ["Bon", "Gratte", "Top", "Pointe", "Talon"])
+            contact = st.selectbox("Contact", ["Bon", "Gratte", "Top", "Pointe", "Talon"])
             
             c_dir, c_sco = st.columns(2)
             with c_dir: direction = st.radio("Direction", ["Gauche", "Centre", "Droite"], horizontal=True)
@@ -158,7 +153,7 @@ with tab_saisie:
 
         st.session_state['coups'].append({
             'date': str(datetime.date.today()), 'mode': mode.split()[0], 'club': club,
-            'strat_dist': obj_dist, 'amplitude': amplitude,
+            'strat_dist': obj_dist, 'amplitude': amplitude, 'strat_effet': strat_effet,
             'distance': dist_real, 'lie': lie, 'contact': contact,
             'direction': direction, 'score_lateral': score_lat,
             'delta_dist': delta, 'err_longueur': err_L,
@@ -166,72 +161,125 @@ with tab_saisie:
         })
         st.success("Coup enregistré !")
 
-# --- ONGLET 2 : CLUB DNA (LE COEUR DU SYSTÈME) ---
-with tab_dna:
-    if st.session_state['coups']:
-        df = pd.DataFrame(st.session_state['coups'])
-        df_long = df[df['type_coup'] == 'Jeu Long']
-        
-        # --- SÉLECTEUR GLOBAL ---
-        st.markdown("### 🔎 Inspecteur de Club")
-        col_sel1, col_sel2 = st.columns(2)
-        with col_sel1:
-            selected_club = st.selectbox("Sélectionnez le club à analyser", df_long['club'].unique())
-        with col_sel2:
-            selected_ampli = st.selectbox("Amplitude", ["Plein", "3/4", "1/2", "Tout"], index=0)
+# --- DATA PREP ---
+if st.session_state['coups']:
+    df = pd.DataFrame(st.session_state['coups'])
+    df_long = df[df['type_coup'] == 'Jeu Long']
+else:
+    df_long = pd.DataFrame()
 
-        # Filtrage des données
+# --- ONGLET 2 : BAG MAPPING (Gapping) ---
+with tab_sac:
+    if not df_long.empty:
+        st.header("🎒 Étalonnage du Sac (Gapping)")
+        
+        # Filtre Amplitude pour le mapping
+        f_ampli_sac = st.selectbox("Amplitude pour le Mapping", ["Plein", "3/4", "1/2"], index=0)
+        df_sac = df_long[df_long['amplitude'] == f_ampli_sac].copy()
+        
+        if not df_sac.empty:
+            # Ordre Clubs
+            df_sac['club'] = pd.Categorical(df_sac['club'], categories=CLUBS_ORDER, ordered=True)
+            df_sac = df_sac.sort_values('club')
+            
+            # --- 1. GRAPHIQUE VISUEL ---
+            fig_bag, ax_bag = plt.subplots(figsize=(12, 5))
+            sns.boxplot(x='club', y='distance', data=df_sac, ax=ax_bag, palette="viridis")
+            sns.stripplot(x='club', y='distance', data=df_sac, color=".25", size=3, alpha=0.5, ax=ax_bag)
+            ax_bag.grid(True, axis='y', alpha=0.3)
+            ax_bag.set_title(f"Portées de balles : {f_ampli_sac}")
+            st.pyplot(fig_bag)
+            
+            st.markdown("---")
+            
+            # --- 2. TABLEAU DE DONNÉES PRÉCISES (AJOUT MAJEUR) ---
+            st.subheader("🔢 Données Chiffrées par Club")
+            
+            # Calculs Stats
+            stats_sac = df_sac.groupby('club', observed=True)['distance'].agg(['count', 'mean', 'min', 'max', 'std']).round(1)
+            
+            # Calcul Efficacité (Moyenne / Max)
+            stats_sac['Efficacité (%)'] = (stats_sac['mean'] / stats_sac['max'] * 100).round(0)
+            
+            # Renommage
+            stats_sac.columns = ['Nb Coups', 'Moyenne (m)', 'Min', 'Max', 'Dispersion (±m)', 'Efficacité (%)']
+            
+            # Affichage "Pro" avec couleurs
+            st.dataframe(
+                stats_sac.style.background_gradient(cmap="Blues", subset=['Moyenne (m)'])
+                               .background_gradient(cmap="RdYlGn", subset=['Efficacité (%)'])
+                               .format("{:.1f}", subset=['Moyenne (m)', 'Min', 'Max', 'Dispersion (±m)'])
+                               .format("{:.0f}%", subset=['Efficacité (%)']),
+                use_container_width=True
+            )
+            st.info("💡 **Indice de Progression :** Regardez la colonne **'Efficacité'**. Si vous êtes en dessous de 85%, cela signifie que vous avez la puissance (Max) mais pas la maîtrise (Moyenne).")
+            
+        else:
+            st.warning("Pas de données pour cette amplitude.")
+    else:
+        st.info("En attente de données...")
+
+# --- ONGLET 3 : CLUB DNA (LIE & STATS) ---
+with tab_dna:
+    if not df_long.empty:
+        
+        col_sel1, col_sel2 = st.columns(2)
+        with col_sel1: selected_club = st.selectbox("Club à analyser", df_long['club'].unique())
+        with col_sel2: selected_ampli = st.selectbox("Amplitude", ["Plein", "3/4", "1/2", "Tout"], index=0)
+
         df_club = df_long[df_long['club'] == selected_club]
         if selected_ampli != "Tout":
             df_club = df_club[df_club['amplitude'] == selected_ampli]
         
         if not df_club.empty:
             
-            # --- LIGNE 1 : KPI CARTE D'IDENTITÉ ---
-            st.markdown(f"### 🆔 Carte d'Identité : {selected_club} ({selected_ampli})")
-            kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+            # KPI RAPIDES
+            st.markdown(f"#### 🔎 Focus : {selected_club}")
+            k1, k2, k3, k4 = st.columns(4)
+            avg = df_club['distance'].mean()
+            k1.metric("Moyenne", f"{avg:.1f}m")
+            k2.metric("Précision (Dispersion)", f"± {df_club['distance'].std():.1f}m")
+            k3.metric("Meilleur Coup", f"{df_club['distance'].max():.1f}m")
             
-            avg_dist = df_club['distance'].mean()
-            max_dist = df_club['distance'].max()
-            std_dev = df_club['distance'].std() # Ecart Type
-            contact_rate = len(df_club[df_club['contact']=='Bon']) / len(df_club) * 100
-            
-            kpi1.metric("Distance Moyenne", f"{avg_dist:.1f}m")
-            kpi2.metric("Record (Max)", f"{max_dist:.1f}m")
-            kpi3.metric("Dispersion (Sigma)", f"± {std_dev:.1f}m", help="Plus ce chiffre est bas, plus vous êtes régulier.")
-            kpi4.metric("Qualité de Contact", f"{contact_rate:.0f}%", help="% de coups déclarés 'Bon Contact'")
+            # Calcul Réussite Intention
+            reussite_dist = len(df_club[abs(df_club['delta_dist']) < 8]) / len(df_club) * 100
+            k4.metric("Précision Cible", f"{reussite_dist:.0f}%", help="% de balles à +/- 8m de la cible")
             
             st.markdown("---")
-
-            # --- LIGNE 2 : ANALYSE DISTANCE & LIE (GAUCHE) / DISPERSION (DROITE) ---
+            
             col_L, col_R = st.columns([1, 1])
             
+            # --- SECTION GAUCHE : IMPACT DU LIE (DATA + GRAPH) ---
             with col_L:
-                st.subheader("📏 Consistance & Lies")
+                st.subheader("🌿 Impact du Lie (Terrain)")
                 
-                # Graph 1 : Histogramme de Distribution (KDE)
-                fig_dist, ax_dist = plt.subplots(figsize=(6, 3))
-                sns.histplot(df_club['distance'], kde=True, ax=ax_dist, color="teal")
-                ax_dist.axvline(avg_dist, color='red', linestyle='--')
-                ax_dist.set_title("Distribution des distances (Régularité)")
-                st.pyplot(fig_dist)
-                st.caption("Une courbe étroite et haute = Très régulier. Une courbe plate = Distances aléatoires.")
-                
-                # Graph 2 : Boxplot par Lie
-                st.write("**Impact du Lie (Tee vs Fairway vs Rough)**")
+                # 1. Graphique
                 if len(df_club['lie'].unique()) > 1:
                     fig_lie, ax_lie = plt.subplots(figsize=(6, 3))
                     sns.boxplot(x='lie', y='distance', data=df_club, ax=ax_lie, palette="Set2")
                     st.pyplot(fig_lie)
-                else:
-                    st.info("Pas assez de lies différents pour comparer.")
-
-            with col_R:
-                st.subheader("🎯 Précision & Ratés")
                 
-                # Graph 3 : Dispersion XY (Ellipses)
+                # 2. Tableau Data (NOUVEAU)
+                st.write("**Pertes de distance par Lie**")
+                pivot_lie = df_club.groupby('lie')['distance'].agg(['mean', 'count']).round(1)
+                
+                # Calcul % par rapport au Tee ou Fairway (Reference)
+                ref_dist = pivot_lie['mean'].max() # On prend la meilleure situation comme ref
+                pivot_lie['% du Max'] = (pivot_lie['mean'] / ref_dist * 100).round(0)
+                pivot_lie['Perte (m)'] = (ref_dist - pivot_lie['mean']).round(1)
+                
+                pivot_lie.columns = ['Moyenne', 'Nb Coups', '% Performance', 'Perte (m)']
+                
+                st.dataframe(pivot_lie.style.format("{:.1f}m", subset=['Moyenne', 'Perte (m)']).format("{:.0f}%", subset=['% Performance']))
+                st.caption("Ce tableau vous dit exactement combien de mètres retirer quand vous êtes dans le Rough.")
+
+            # --- SECTION DROITE : DISPERSION & CONTACT ---
+            with col_R:
+                st.subheader("🎯 Qualité & Dispersion")
+                
+                # Graphique Dispersion
                 fig_scat, ax_scat = plt.subplots(figsize=(6, 4))
-                # Coordonnées
+                
                 def get_x(row):
                     x = row['score_lateral'] * 5 
                     if row['direction'] == 'Gauche': return -x
@@ -239,9 +287,9 @@ with tab_dna:
                     return 0 + np.random.normal(0,1)
                 
                 df_club['x_viz'] = df_club.apply(get_x, axis=1)
+                sns.scatterplot(data=df_club, x='x_viz', y='distance', hue='contact', style='mode', s=100, ax=ax_scat)
                 
-                sns.scatterplot(data=df_club, x='x_viz', y='distance', hue='mode', style='contact', s=100, ax=ax_scat)
-                # Ellipse globale
+                # Ellipse
                 if len(df_club) > 3:
                     cov = np.cov(df_club['x_viz'], df_club['distance'])
                     lambda_, v = np.linalg.eig(cov)
@@ -249,77 +297,12 @@ with tab_dna:
                     ell = Ellipse(xy=(df_club['x_viz'].mean(), df_club['distance'].mean()),
                                   width=lambda_[0]*4, height=lambda_[1]*4,
                                   angle=np.rad2deg(np.arccos(v[0, 0])), 
-                                  edgecolor='green', facecolor='none', linestyle='--', label='Zone 95%')
+                                  edgecolor='red', facecolor='none', linestyle='--')
                     ax_scat.add_artist(ell)
                 
-                ax_scat.set_title("Dispersion Latérale vs Distance")
                 st.pyplot(fig_scat)
                 
-                # Graph 4 : Heatmap Simplifiée
-                st.write("**Zone de Ratés (Heatmap)**")
-                heat_data = df_club.groupby(['err_longueur', 'direction']).size().unstack(fill_value=0)
-                y_ord = ["Long", "Bonne Longueur", "Court"]
-                x_ord = ["Gauche", "Centre", "Droite"]
-                heat_data = heat_data.reindex(index=y_ord, columns=x_ord, fill_value=0)
-                fig_h, ax_h = plt.subplots(figsize=(5, 3))
-                sns.heatmap(heat_data, annot=True, fmt='d', cmap="Reds", cbar=False, ax=ax_h)
-                st.pyplot(fig_h)
 
-            st.markdown("---")
+[Image of box plot chart explanation]
 
-            # --- LIGNE 3 : ÉVOLUTION & TECHNIQUE ---
-            col_evo, col_tech = st.columns([2, 1])
-            
-            with col_evo:
-                st.subheader("📈 Évolution Temporelle")
-                # Conversion date pour tri
-                df_club['date_dt'] = pd.to_datetime(df_club['date'])
-                df_sorted = df_club.sort_values('date_dt')
-                
-                # Moyenne glissante sur 5 coups
-                df_sorted['Moyenne Mobile'] = df_sorted['distance'].rolling(window=5).mean()
-                
-                fig_line, ax_line = plt.subplots(figsize=(8, 3))
-                ax_line.plot(df_sorted['date_dt'], df_sorted['distance'], 'o', alpha=0.3, label="Coup brut")
-                ax_line.plot(df_sorted['date_dt'], df_sorted['Moyenne Mobile'], color='red', linewidth=2, label="Tendance")
-                ax_line.set_title("Progression de la distance")
-                ax_line.legend()
-                st.pyplot(fig_line)
-            
-            with col_tech:
-                st.subheader("⚙️ Qualité de Frappe")
-                cont_counts = df_club['contact'].value_counts()
-                fig_pie, ax_pie = plt.subplots(figsize=(3, 3))
-                ax_pie.pie(cont_counts, labels=cont_counts.index, autopct='%1.1f%%', startangle=90, colors=sns.color_palette("pastel"))
-                st.pyplot(fig_pie)
-        
-        else:
-            st.warning(f"Pas de données pour {selected_club} en {selected_ampli}.")
-    else:
-        st.info("Importez ou générez des données.")
-
-# --- ONGLET 3 : MAPPING DU SAC (BONUS) ---
-with tab_sac:
-    if st.session_state['coups']:
-        st.header("🎒 Bag Mapping (Gapping)")
-        st.markdown("Ce graphique montre l'étalonnage de tout votre sac pour repérer les trous de distance.")
-        
-        df = pd.DataFrame(st.session_state['coups'])
-        df_full = df[(df['type_coup']=='Jeu Long') & (df['amplitude']=='Plein')]
-        
-        if not df_full.empty:
-            # Tri des clubs
-            df_full['club'] = pd.Categorical(df_full['club'], categories=CLUBS_ORDER, ordered=True)
-            df_full = df_full.sort_values('club')
-            
-            fig_bag, ax_bag = plt.subplots(figsize=(12, 6))
-            sns.boxplot(x='club', y='distance', data=df_full, ax=ax_bag, palette="viridis")
-            sns.swarmplot(x='club', y='distance', data=df_full, color=".25", size=3, alpha=0.5, ax=ax_bag)
-            
-            ax_bag.grid(True, axis='y', linestyle='--', alpha=0.5)
-            ax_bag.set_title("Étalonnage complet (Pleins Coups)")
-            st.pyplot(fig_bag)
-            
-            st.info("💡 Astuce : Si les boîtes de deux clubs se chevauchent trop (ex: Fer 8 et Fer 7), c'est que vous n'avez pas besoin des deux clubs, ou que votre technique doit être ajustée.")
-    else:
-        st.info("En attente de données...")
+                st.caption("L'ellipse rouge montre votre zone de dispersion principale (95%).")
