@@ -10,28 +10,18 @@ from fpdf import FPDF
 import io
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 36.0 Complete DNA", layout="wide")
+st.set_page_config(page_title="GolfShot 37.0 Full Data", layout="wide")
 
 # --- CSS ---
 st.markdown("""
 <style>
-    .metric-card {
-        background-color: #f0f2f6; 
-        padding: 10px; 
-        border-radius: 5px; 
-        margin-bottom: 10px;
-    }
+    .metric-card {background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;}
     h4 {color: #1565C0;}
     .stButton>button {width: 100%;}
-    
     .caddie-box {
-        border: 2px solid #2E7D32; 
-        padding: 15px; 
-        border-radius: 10px; 
-        background-color: #E8F5E9; 
-        color: #1B5E20 !important;
-        text-align: center;
-        font-weight: bold;
+        border: 2px solid #2E7D32; padding: 15px; border-radius: 10px; 
+        background-color: #E8F5E9; color: #1B5E20 !important; 
+        text-align: center; font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -201,7 +191,7 @@ if st.session_state['coups']:
     st.sidebar.caption(f"{len(df_analysis)} coups analysés.")
 
 # 3. RAPPORT PDF
-if st.sidebar.button("📄 Générer Rapport PDF"):
+if st.sidebar.button("📄 Générer Rapport Coach"):
     if not df_analysis.empty:
         try:
             pdf_bytes = create_pro_pdf(df_analysis, pd.DataFrame(st.session_state['parties']))
@@ -232,12 +222,18 @@ with st.sidebar.expander("Assistant", expanded=True):
     else: st.warning("Données requises.")
 
 st.sidebar.markdown("---")
-if st.sidebar.button("Injecter Données Test V36"):
+
+# 5. GÉNÉRATEUR COMPLET V37 (TOUS CLUBS + EFFETS)
+if st.sidebar.button("Injecter Données Test V37"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(60)]
-    for _ in range(200):
+    
+    # Génération massive pour tous les clubs
+    for _ in range(600):
         mode = np.random.choice(["Parcours", "Practice", "Combine"], p=[0.6, 0.3, 0.1])
-        club = np.random.choice(["Driver", "Fer 7", "Putter"])
+        # CHOIX ALÉATOIRE PARMI TOUS LES CLUBS
+        club = np.random.choice(CLUBS_ORDER)
+        
         entry = {
             'date': str(np.random.choice(dates)), 'mode': mode, 'club': club,
             'strat_dist': 0, 'distance': 0, 'score_lateral': 0, 'direction': 'Centre',
@@ -246,28 +242,47 @@ if st.sidebar.button("Injecter Données Test V36"):
             'strat_effet': 'N/A', 'real_effet': 'N/A', 'amplitude': 'Plein', 'contact': 'Bon',
             'dist_remain': 0, 'par_trou': 4
         }
+        
         if club == "Putter":
             d = round(np.random.uniform(0.5, 15.0), 1)
             entry.update({'strat_dist': d, 'distance': d, 'resultat_putt': np.random.choice(PUTT_RESULTS), 'type_coup': 'Putt', 'lie': 'Green'})
         else:
-            t = DIST_REF[club]
+            # Distance de référence
+            t = DIST_REF.get(club, 100)
             r = np.random.normal(t, 10)
-            entry.update({'strat_dist': t, 'distance': r, 'score_lateral': np.random.randint(0,3), 'type_coup': 'Jeu Long'})
+            
+            # EFFETS
+            st_eff = np.random.choice(["Tout droit", "Fade", "Draw"], p=[0.6, 0.2, 0.2])
+            # 70% de réussite
+            if np.random.random() < 0.7:
+                rl_eff = st_eff
+            else:
+                rl_eff = np.random.choice(["Push", "Pull", "Hook", "Slice", "Gratte", "Top"])
+            
+            entry.update({
+                'strat_dist': t, 'distance': r, 
+                'score_lateral': np.random.randint(0,4), 
+                'type_coup': 'Jeu Long',
+                'strat_effet': st_eff,
+                'real_effet': rl_eff
+            })
+            
         add_coup_to_db(entry)
+    
     st.session_state['coups'] = load_coups_from_db().to_dict('records')
-    st.sidebar.success("Données injectées !")
+    st.sidebar.success("Données complètes injectées !")
     st.rerun()
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Backup CSV", convert_df(df_ex), "golf_v36_backup.csv", "text/csv")
+    st.sidebar.download_button("📥 Backup CSV", convert_df(df_ex), "golf_v37_backup.csv", "text/csv")
 
 if st.sidebar.button("⚠️ Vider DB"):
     conn.execute("DELETE FROM coups"); conn.execute("DELETE FROM parties"); conn.commit()
     st.session_state['coups'] = []; st.session_state['parties'] = []; st.rerun()
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 36.0 : Complete DNA")
+st.title("🏌️‍♂️ GolfShot 37.0 : Full Data")
 
 tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt = st.tabs([
     "⛳ Parcours", "🚜 Practice", "🏆 Combine", "🧬 Club DNA", "🎒 Mapping", "🟢 Putting"
@@ -487,21 +502,18 @@ with tab_dna:
                 fig, ax = plt.subplots()
                 plot_dispersion_analysis(ax, sub[sub['mode']=='Practice'], "Practice", "blue")
                 st.pyplot(fig)
-                # --- CORRECTION V36 : METRIQUES PRACTICE ---
                 if not sub[sub['mode']=='Practice'].empty:
-                    st.metric("Dispersion Profondeur", f"± {sub[sub['mode']=='Practice']['distance'].std():.1f}m")
-                    st.metric("Score Latéral Moyen", f"{sub[sub['mode']=='Practice']['score_lateral'].mean():.1f} / 5")
-
+                    st.metric("Prof.", f"± {sub[sub['mode']=='Practice']['distance'].std():.1f}m")
+                    st.metric("Lat.", f"{sub[sub['mode']=='Practice']['score_lateral'].mean():.1f}/5")
             with c2:
                 fig, ax = plt.subplots()
                 plot_dispersion_analysis(ax, sub[sub['mode']=='Parcours'], "Parcours", "red")
                 st.pyplot(fig)
-                # --- CORRECTION V36 : METRIQUES PARCOURS ---
                 if not sub[sub['mode']=='Parcours'].empty:
-                    st.metric("Dispersion Profondeur", f"± {sub[sub['mode']=='Parcours']['distance'].std():.1f}m")
-                    st.metric("Score Latéral Moyen", f"{sub[sub['mode']=='Parcours']['score_lateral'].mean():.1f} / 5")
+                    st.metric("Prof.", f"± {sub[sub['mode']=='Parcours']['distance'].std():.1f}m")
+                    st.metric("Lat.", f"{sub[sub['mode']=='Parcours']['score_lateral'].mean():.1f}/5")
             
-            st.subheader("Effets")
+            st.subheader("Maîtrise des Effets")
             df_eff = sub[sub['strat_effet'].isin(["Fade", "Draw", "Tout droit"])]
             if not df_eff.empty:
                 df_eff['OK'] = df_eff.apply(lambda x: 1 if x['strat_effet'] in x['real_effet'] else 0, axis=1)
@@ -518,7 +530,8 @@ with tab_sac:
             sns.boxplot(data=df_s, x='club', y='distance', ax=ax)
             st.pyplot(fig)
             stats = df_s.groupby('club')['distance'].agg(['count', 'mean', 'max', 'std']).round(1)
-            st.dataframe(stats.style.background_gradient(cmap="Blues"), use_container_width=True)
+            stats.columns = ['Nb Coups', 'Moyenne (m)', 'Max (m)', 'Écart Type (m)']
+            st.dataframe(stats.style.background_gradient(cmap="Blues", subset=['Moyenne (m)', 'Max (m)']).background_gradient(cmap="RdYlGn_r", subset=['Écart Type (m)']), use_container_width=True)
 
 with tab_putt:
     st.header("🟢 Putting")
