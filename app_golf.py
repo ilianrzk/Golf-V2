@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import datetime
 
 # Configuration de la page
-st.set_page_config(page_title="GolfShot Pro 3.1", layout="wide")
+st.set_page_config(page_title="GolfShot Pro 4.1", layout="wide")
 
 # --- GESTION DES DONNÉES ---
 if 'coups' not in st.session_state:
@@ -14,195 +14,243 @@ if 'coups' not in st.session_state:
 def convert_df(df):
     return df.to_csv(index=False).encode('utf-8')
 
-# --- SIDEBAR : SAUVEGARDE & OPTIONS ---
-st.sidebar.title("💾 Menu")
+# --- LISTE OFFICIELLE DES CLUBS (MODIFIÉE) ---
+# Fer 4 remplacé par Fer 3
+CLUBS_ORDER = [
+    "Driver", "Bois 5", "Hybride", 
+    "Fer 3", "Fer 5", "Fer 6", "Fer 7", "Fer 8", "Fer 9", 
+    "PW", "50°", "55°", "60°", 
+    "Putter"
+]
 
-# Sauvegarde / Chargement
-uploaded_file = st.sidebar.file_uploader("Charger historique (CSV)", type="csv")
-if uploaded_file is not None:
-    try:
-        df_loaded = pd.read_csv(uploaded_file)
-        st.session_state['coups'] = df_loaded.to_dict('records')
-        st.sidebar.success("Données chargées !")
-    except:
-        st.sidebar.error("Erreur de fichier")
+# --- SIDEBAR : SAUVEGARDE & GÉNÉRATEUR ---
+st.sidebar.title("⚙️ Options")
 
-if st.session_state['coups']:
-    df_export = pd.DataFrame(st.session_state['coups'])
-    csv = convert_df(df_export)
-    st.sidebar.download_button(
-        label="📥 Télécharger mes données (Sauvegarde)",
-        data=csv,
-        file_name='mon_golf_v3_1.csv',
-        mime='text/csv',
-    )
-
-st.sidebar.markdown("---")
-if st.sidebar.button("🗑️ Tout effacer"):
-    st.session_state['coups'] = []
-
-# --- INTERFACE PRINCIPALE ---
-st.title("🏌️‍♂️ GolfShot Pro 3.1")
-
-tab1, tab2, tab3 = st.tabs(["⛳ Saisie Parcours", "📊 Statistiques", "🧠 Coaching Putting"])
-
-# --- ONGLET 1 : SAISIE PARCOURS ---
-with tab1:
-    st.markdown("### Nouveau Coup")
+# 1. Générateur de Données de Test
+st.sidebar.markdown("### 🧪 Zone de Test")
+if st.sidebar.button("Générer 10 coups/club (Test)"):
+    new_data = []
+    dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(5)]
     
-    # 1. CONTEXTE DU TROU
-    col_ctx1, col_ctx2 = st.columns(2)
-    with col_ctx1:
-        par_trou = st.selectbox("Par du trou", [3, 4, 5], index=1)
-    with col_ctx2:
-        # --- LISTE DES CLUBS MISE À JOUR ---
-        liste_clubs = [
-            "Driver", "Bois 5", "Hybride", 
-            "Fer 4", "Fer 5", "Fer 6", "Fer 7", "Fer 8", "Fer 9", 
-            "PW", "50°", "55°", "60°", 
-            "Putter"
-        ]
-        club = st.selectbox("Club joué", liste_clubs)
-
-    st.markdown("---")
-
-    # 2. LOGIQUE DYNAMIQUE (PUTTER vs AUTRES)
-    if club == "Putter":
-        st.info("🟢 Mode Putting Activé")
-        col_p1, col_p2, col_p3 = st.columns(3)
-        
-        with col_p1:
-            # Distance avec virgules (float)
-            dist_putt = st.number_input("Distance Putt (m)", min_value=0.0, value=1.5, step=0.1, format="%.1f")
-        
-        with col_p2:
-            pente_lat = st.selectbox("Pente Latérale", ["Plat", "Gauche-Droite", "Droite-Gauche"])
-            denivele = st.selectbox("Dénivelé", ["Plat", "Montée", "Descente"])
-            
-        with col_p3:
-            resultat_putt = st.radio("Résultat", ["Dans le trou", "Raté - Court", "Raté - Long", "Raté - Gauche", "Raté - Droite"])
-            
-        if st.button("Enregistrer le Putt", type="primary"):
-            coup = {
-                'date': str(datetime.date.today()),
-                'par_trou': par_trou,
-                'club': club,
-                'distance': dist_putt,
-                'lie': 'Green',
-                'pente': pente_lat,
-                'denivele': denivele,
-                'resultat': resultat_putt,
-                'type_coup': 'Putt'
-            }
-            st.session_state['coups'].append(coup)
-            st.success(f"Putt de {dist_putt}m enregistré !")
-
-    else:
-        # Interface pour les coups normaux (Driver, Fers, Wedges, Bois)
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            distance = st.number_input("Distance (m)", min_value=0, value=100)
-            lie = st.selectbox("Lie", ["Tee", "Fairway", "Rough", "Bunker", "Rough Epais"])
-        
-        with col2:
-            direction = st.radio("Direction", ["Gauche", "Centre", "Droite"], horizontal=True)
-            longueur = st.radio("Profondeur", ["Court", "Ok", "Long"], horizontal=True)
-            
-        with col3:
-            st.write("Validation")
-            if st.button("Enregistrer le Coup", type="primary"):
+    for club in CLUBS_ORDER:
+        for _ in range(10): # 10 coups par club
+            # Logique réaliste simulée
+            if club == 'Putter':
+                dist = np.random.uniform(1.0, 15.0)
+                res = np.random.choice(["Dans le trou", "Raté - Court", "Raté - Long", "Raté - Gauche", "Raté - Droite"], p=[0.4, 0.15, 0.15, 0.15, 0.15])
                 coup = {
-                    'date': str(datetime.date.today()),
-                    'par_trou': par_trou,
+                    'date': str(np.random.choice(dates)),
+                    'mode': 'Practice',
+                    'par_trou': 4,
                     'club': club,
-                    'distance': distance,
-                    'lie': lie,
+                    'distance': round(dist, 1),
+                    'lie': 'Green',
+                    'pente': np.random.choice(["Plat", "Gauche-Droite", "Droite-Gauche"]),
+                    'denivele': np.random.choice(["Plat", "Montée", "Descente"]),
+                    'resultat': res,
+                    'type_coup': 'Putt'
+                }
+            else:
+                # Distances approximatives
+                if club == 'Driver': base = 220
+                elif club == 'Fer 3': base = 180 # Distance estimée Fer 3
+                elif club == 'Fer 7': base = 150
+                else: base = 80
+                
+                noise = np.random.randint(-20, 20)
+                direction = np.random.choice(["Gauche", "Centre", "Droite"], p=[0.2, 0.6, 0.2])
+                longueur = np.random.choice(["Court", "Ok", "Long"], p=[0.2, 0.6, 0.2])
+                
+                coup = {
+                    'date': str(np.random.choice(dates)),
+                    'mode': 'Practice',
+                    'par_trou': 4,
+                    'club': club,
+                    'distance': base + noise,
+                    'lie': 'Tapis/Herbe',
                     'direction': direction,
                     'longueur': longueur,
                     'resultat': f"{direction}/{longueur}",
                     'type_coup': 'Jeu Long'
                 }
-                st.session_state['coups'].append(coup)
-                st.success(f"Coup de {club} enregistré !")
-
-    # Affichage de l'historique récent
-    if st.session_state['coups']:
-        st.markdown("### 📝 5 derniers coups saisis")
-        df_show = pd.DataFrame(st.session_state['coups'])
-        cols_to_show = ['club', 'distance', 'resultat', 'pente', 'denivele']
-        for c in cols_to_show:
-            if c not in df_show.columns:
-                df_show[c] = ""
-        st.dataframe(df_show[cols_to_show].tail(5))
-
-# --- ONGLET 2 : STATISTIQUES GÉNÉRALES ---
-with tab2:
-    if st.session_state['coups']:
-        df = pd.DataFrame(st.session_state['coups'])
-        df_long = df[df['type_coup'] == 'Jeu Long']
-        
-        if not df_long.empty:
-            st.header("Dispersion (Jeu Long)")
-            
-            # On s'assure que les clubs s'affichent dans le bon ordre dans le filtre
-            clubs_presents = df_long['club'].unique()
-            # Petit tri manuel pour l'esthétique si possible, sinon ordre d'apparition
-            club_filter = st.selectbox("Voir Club", clubs_presents)
-            
-            subset = df_long[df_long['club'] == club_filter]
-            
-            if not subset.empty:
-                fig, ax = plt.subplots(figsize=(6, 4))
-                # Simulation coordonnées
-                def get_coords(row):
-                    x, y = 0, 0
-                    noise = np.random.normal(0, 0.1)
-                    if row['direction'] == 'Gauche': x = -1
-                    if row['direction'] == 'Droite': x = 1
-                    if row['longueur'] == 'Court': y = -1
-                    if row['longueur'] == 'Long': y = 1
-                    return x+noise, y+noise
-                
-                coords = subset.apply(get_coords, axis=1, result_type='expand')
-                ax.scatter(coords[0], coords[1], c='blue', alpha=0.6)
-                ax.set_xlim(-2, 2); ax.set_ylim(-2, 2)
-                ax.axhline(0, c='gray', ls='--'); ax.axvline(0, c='gray', ls='--')
-                ax.set_title(f"Dispersion : {club_filter}")
-                st.pyplot(fig)
-        else:
-            st.info("Enregistrez des coups de fer/bois pour voir la dispersion.")
-
-# --- ONGLET 3 : COACHING PUTTING ---
-with tab3:
-    st.header("🧠 Analyse du Putting")
+            new_data.append(coup)
     
-    if st.session_state['coups']:
-        df = pd.DataFrame(st.session_state['coups'])
-        df_putt = df[df['type_coup'] == 'Putt']
-        
-        if not df_putt.empty:
-            col_a, col_b = st.columns(2)
-            
-            with col_a:
-                st.subheader("Réussite par Pente")
-                if 'pente' in df_putt.columns:
-                    res_pente = df_putt.groupby('pente')['resultat'].apply(lambda x: (x == 'Dans le trou').mean() * 100)
-                    st.bar_chart(res_pente)
-            
-            with col_b:
-                st.subheader("Réussite par Dénivelé")
-                if 'denivele' in df_putt.columns:
-                    res_deniv = df_putt.groupby('denivele')['resultat'].apply(lambda x: (x == 'Dans le trou').mean() * 100)
-                    st.bar_chart(res_deniv)
-            
-            st.markdown("---")
-            st.write("### Détail des putts ratés")
-            missed = df_putt[df_putt['resultat'] != 'Dans le trou']
-            if not missed.empty:
-                st.write(missed[['distance', 'pente', 'denivele', 'resultat']])
-            else:
-                st.success("Aucun putt raté pour l'instant !")
+    st.session_state['coups'].extend(new_data)
+    st.sidebar.success(f"✅ Données générées (avec Fer 3) !")
+
+# 2. Sauvegarde
+st.sidebar.markdown("---")
+st.sidebar.markdown("### 💾 Sauvegarde")
+uploaded_file = st.sidebar.file_uploader("Charger CSV", type="csv")
+if uploaded_file is not None:
+    try:
+        df_loaded = pd.read_csv(uploaded_file)
+        st.session_state['coups'] = df_loaded.to_dict('records')
+        st.sidebar.success("Chargé !")
+    except:
+        st.sidebar.error("Erreur")
+
+if st.session_state['coups']:
+    df_export = pd.DataFrame(st.session_state['coups'])
+    csv = convert_df(df_export)
+    st.sidebar.download_button("📥 Télécharger CSV", data=csv, file_name='golf_pro_v4_1.csv', mime='text/csv')
+    
+if st.sidebar.button("🗑️ Reset Total"):
+    st.session_state['coups'] = []
+
+# --- INTERFACE PRINCIPALE ---
+st.title("🏌️‍♂️ GolfShot Pro 4.1")
+
+# Sélecteur de Mode pour la Saisie
+mode_saisie = st.radio("Mode de Saisie :", ["Parcours ⛳", "Practice 🚜"], horizontal=True)
+mode_db = "Parcours" if mode_saisie == "Parcours ⛳" else "Practice"
+
+tab1, tab2 = st.tabs(["📝 Saisie des Coups", "🧠 LE COACH (Analyse)"])
+
+# --- ONGLET 1 : SAISIE ---
+with tab1:
+    st.markdown(f"### Enregistrement - Mode {mode_db}")
+    
+    col_club, col_dist = st.columns(2)
+    with col_club:
+        club = st.selectbox("Club", CLUBS_ORDER)
+    with col_dist:
+        # Contexte différent selon le mode
+        if mode_db == "Parcours":
+            par_trou = st.selectbox("Par", [3, 4, 5], index=1)
+            lie = st.selectbox("Lie", ["Tee", "Fairway", "Rough", "Bunker"])
         else:
-            st.info("Aucune donnée de putting enregistrée.")
+            par_trou = 0 
+            lie = "Practice"
+
+    # --- LOGIQUE PUTTING ---
+    if club == "Putter":
+        col_p1, col_p2, col_p3 = st.columns(3)
+        with col_p1:
+            dist_putt = st.number_input("Distance (m)", 0.0, 20.0, 1.5, 0.1, format="%.1f")
+        with col_p2:
+            pente = st.selectbox("Pente", ["Plat", "Gauche-Droite", "Droite-Gauche"])
+            deniv = st.selectbox("Dénivelé", ["Plat", "Montée", "Descente"])
+        with col_p3:
+            res_putt = st.radio("Résultat", ["Dans le trou", "Raté - Court", "Raté - Long", "Raté - Gauche", "Raté - Droite"])
+            
+        if st.button("Valider Putt", type="primary"):
+            st.session_state['coups'].append({
+                'date': str(datetime.date.today()), 'mode': mode_db,
+                'club': club, 'distance': dist_putt, 'lie': 'Green',
+                'pente': pente, 'denivele': deniv, 'resultat': res_putt,
+                'type_coup': 'Putt', 'par_trou': par_trou
+            })
+            st.success("Putt enregistré")
+
+    # --- LOGIQUE JEU LONG ---
     else:
-        st.info("Commencez par saisir des données.")
+        col_j1, col_j2 = st.columns(2)
+        with col_j1:
+            dist_shot = st.number_input("Distance (m)", 0, 300, 130)
+        with col_j2:
+            direction = st.radio("Direction", ["Gauche", "Centre", "Droite"], horizontal=True)
+            longueur = st.radio("Profondeur", ["Court", "Ok", "Long"], horizontal=True)
+            
+        if st.button(f"Valider {club}", type="primary"):
+            st.session_state['coups'].append({
+                'date': str(datetime.date.today()), 'mode': mode_db,
+                'club': club, 'distance': dist_shot, 'lie': lie,
+                'direction': direction, 'longueur': longueur,
+                'resultat': f"{direction}/{longueur}", 'type_coup': 'Jeu Long', 'par_trou': par_trou
+            })
+            st.success(f"Coup de {club} enregistré")
+
+# --- ONGLET 2 : LE COACH IA ---
+with tab2:
+    if not st.session_state['coups']:
+        st.info("Commencez par saisir des données ou utilisez le bouton 'Générer' dans le menu.")
+    else:
+        df = pd.DataFrame(st.session_state['coups'])
+        
+        st.markdown("## 🧠 Analyse Sectorielle")
+        
+        c_driver, c_fers, c_wedges, c_putt = st.tabs(["🚀 Driving", "⚔️ Fers", "🎯 Wedges", "🟢 Putting"])
+        
+        # --- COACH DRIVING ---
+        with c_driver:
+            df_drive = df[df['club'].isin(['Driver', 'Bois 5', 'Hybride'])]
+            if not df_drive.empty:
+                total = len(df_drive)
+                miss_left = len(df_drive[df_drive['direction'] == 'Gauche'])
+                miss_right = len(df_drive[df_drive['direction'] == 'Droite'])
+                fairway = len(df_drive[df_drive['direction'] == 'Centre'])
+                
+                col1, col2 = st.columns(2)
+                col1.metric("Précision (Fairway)", f"{int(fairway/total*100)}%")
+                if total > 0:
+                    col1.metric("Distance Moyenne", f"{int(df_drive['distance'].mean())}m")
+                
+                st.subheader("Diagnostic Driving :")
+                if miss_right > miss_left and miss_right > total * 0.4:
+                    st.error("⚠️ **Problème : SLICE**")
+                    st.write("Conseil : Surveillez votre alignement d'épaules à l'adresse.")
+                elif miss_left > miss_right and miss_left > total * 0.4:
+                    st.error("⚠️ **Problème : HOOK**")
+                    st.write("Conseil : Relâchez la pression du grip.")
+                else:
+                    st.success("✅ Bon équilibre latéral.")
+            else:
+                st.warning("Pas de données de bois.")
+
+        # --- COACH FERS (MISE À JOUR FER 3) ---
+        with c_fers:
+            # Nouvelle liste incluant Fer 3
+            fers_list = ["Fer 3", "Fer 5", "Fer 6", "Fer 7", "Fer 8", "Fer 9"]
+            df_fers = df[df['club'].isin(fers_list)]
+            
+            if not df_fers.empty:
+                miss_short = len(df_fers[df_fers['longueur'] == 'Court'])
+                total = len(df_fers)
+                
+                st.write(f"Basé sur {total} coups de fers (du 3 au 9).")
+                
+                fig, ax = plt.subplots(figsize=(5,3))
+                def simple_coords(r):
+                    return (-1 if r['direction']=='Gauche' else 1 if r['direction']=='Droite' else 0) + np.random.normal(0,0.1), \
+                           (-1 if r['longueur']=='Court' else 1 if r['longueur']=='Long' else 0) + np.random.normal(0,0.1)
+                coords = df_fers.apply(simple_coords, axis=1, result_type='expand')
+                ax.scatter(coords[0], coords[1], alpha=0.5)
+                ax.set_title("Dispersion Fers")
+                ax.set_xticks([]); ax.set_yticks([])
+                col_graph, col_txt = st.columns(2)
+                col_graph.pyplot(fig)
+                
+                with col_txt:
+                    if miss_short > total * 0.4:
+                        st.warning("📉 **Tendance : Trop Court**")
+                        st.write("Conseil : Prenez un club de plus (ex: Fer 6 au lieu de Fer 7) et tapez à 80%.")
+                    else:
+                        st.success("✅ Bonne gestion des distances.")
+            else:
+                st.warning("Pas de données de Fers.")
+
+        # --- COACH WEDGES ---
+        with c_wedges:
+            df_wedges = df[df['club'].isin(['PW', '50°', '55°', '60°'])]
+            if not df_wedges.empty:
+                st.dataframe(df_wedges.groupby('club')['distance'].agg(['mean', 'std', 'count']).round(1))
+            else:
+                st.warning("Pas de données de Wedges.")
+
+        # --- COACH PUTTING ---
+        with c_putt:
+            df_putt = df[df['club'] == 'Putter']
+            if not df_putt.empty:
+                made = len(df_putt[df_putt['resultat'] == 'Dans le trou'])
+                total = len(df_putt)
+                st.metric("Taux de réussite global", f"{int(made/total*100)}%")
+                
+                if 'pente' in df_putt.columns:
+                    st.subheader("Analyse Pentes")
+                    # On calcule le taux d'ECHEC pour voir la faiblesse
+                    res_pente = df_putt.groupby('pente')['resultat'].apply(lambda x: (x != 'Dans le trou').mean() * 100)
+                    st.bar_chart(res_pente)
+                    st.caption("Barre haute = Pente qui vous pose problème (Taux d'échec).")
+            else:
+                st.warning("Pas de données de Putting.")
