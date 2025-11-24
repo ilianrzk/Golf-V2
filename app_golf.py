@@ -5,14 +5,7 @@ import matplotlib.pyplot as plt
 import datetime
 
 # Configuration de la page
-st.set_page_config(page_title="GolfShot Data 5.0", layout="wide")
-
-# --- STYLES CSS POUR TABLEAUX ---
-st.markdown("""
-<style>
-    [data-testid="stMetricValue"] { font-size: 1.5rem; }
-</style>
-""", unsafe_allow_html=True)
+st.set_page_config(page_title="GolfShot 6.0 Reality Check", layout="wide")
 
 # --- GESTION DES DONNÉES ---
 if 'coups' not in st.session_state:
@@ -28,213 +21,204 @@ CLUBS_ORDER = [
     "Putter"
 ]
 
-# --- SIDEBAR : OPTIONS & DATA ---
-st.sidebar.title("🧮 Data Center")
+# --- SIDEBAR : GÉNÉRATEUR INTELLIGENT ---
+st.sidebar.title("⚙️ Options")
 
-# Générateur Avancé
-if st.sidebar.button("Générer Dataset Pro (Test)"):
+if st.sidebar.button("Générer Données Comparatives (Test)"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(10)]
     
-    for _ in range(200): # 200 coups simulés
-        club = np.random.choice(CLUBS_ORDER)
+    for _ in range(100):
+        club = np.random.choice(["Driver", "Fer 7", "PW"]) # Focus sur quelques clubs
+        mode = np.random.choice(["Practice", "Parcours"])
         d = np.random.choice(dates)
         
-        if club == 'Putter':
-            dist = np.random.exponential(3) # Beaucoup de putts courts, peu de longs
-            if dist < 0.5: dist = 0.5
-            # Probabilité de réussite diminue avec la distance
-            success_prob = max(0.05, 1 - (dist / 8)) 
-            res = "Dans le trou" if np.random.random() < success_prob else "Raté"
-            
-            new_data.append({
-                'date': str(d), 'mode': 'Parcours', 'club': 'Putter',
-                'distance': round(dist, 1), 'resultat': res, 'type_coup': 'Putt',
-                'pente': np.random.choice(["Plat", "G-D", "D-G"]), 
-                'denivele': "Plat", 'green_touche': False
-            })
+        # Simulation : On tape plus fort et mieux au Practice
+        base_dist = 150 if club == "Fer 7" else (230 if club == "Driver" else 100)
+        if mode == "Practice":
+            dist = np.random.normal(base_dist + 5, 5) # +5m au practice
+            score_lat = np.random.choice([0, 1, 2], p=[0.5, 0.3, 0.2]) # Plus précis
         else:
-            # Simulation Fers/Bois
-            base = 220 if club=='Driver' else (140 if 'Fer' in club else 90)
-            dist_real = np.random.normal(base, 15)
-            green_hit = True if (abs(dist_real - base) < 10) and ('Fer' in club or 'PW' in club) else False
-            
-            new_data.append({
-                'date': str(d), 'mode': 'Parcours', 'club': club,
-                'distance': round(dist_real, 1), 
-                'direction': np.random.choice(["Centre", "Gauche", "Droite"], p=[0.5, 0.25, 0.25]),
-                'longueur': np.random.choice(["Ok", "Court", "Long"], p=[0.6, 0.2, 0.2]),
-                'resultat': "Jeu", 'type_coup': 'Jeu Long',
-                'green_touche': green_hit # Nouveau champ KPI
-            })
-            
+            dist = np.random.normal(base_dist - 2, 10) # Moins régulier sur parcours
+            score_lat = np.random.choice([0, 1, 2, 3, 4, 5], p=[0.3, 0.2, 0.2, 0.1, 0.1, 0.1])
+
+        direction = np.random.choice(["Gauche", "Centre", "Droite"])
+        if score_lat == 0: direction = "Centre"
+        if direction == "Centre": score_lat = 0
+        
+        new_data.append({
+            'date': str(d), 'mode': mode, 'club': club,
+            'distance': round(dist, 1), 
+            'direction': direction,
+            'score_lateral': score_lat, # Note 0-5
+            'longueur': "Ok", 'type_coup': 'Jeu Long',
+            'resultat': f"Dispersion: {score_lat}"
+        })
+    
     st.session_state['coups'].extend(new_data)
-    st.sidebar.success("Dataset chargé (200 coups) !")
+    st.sidebar.success("Données comparatives générées !")
 
 # Gestion Fichiers
 st.sidebar.markdown("---")
-uploaded_file = st.sidebar.file_uploader("Importer CSV", type="csv")
+uploaded_file = st.sidebar.file_uploader("Charger CSV", type="csv")
 if uploaded_file:
     try:
         df_loaded = pd.read_csv(uploaded_file)
         st.session_state['coups'] = df_loaded.to_dict('records')
-        st.sidebar.success("Données importées")
-    except: st.sidebar.error("Erreur CSV")
+        st.sidebar.success("Chargé !")
+    except: st.sidebar.error("Erreur")
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("Exporter CSV pour Excel", convert_df(df_ex), "golf_data_expert.csv", "text/csv")
-    
-if st.sidebar.button("🗑️ Reset"): st.session_state['coups'] = []
+    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v6.csv", "text/csv")
+    if st.sidebar.button("🗑️ Reset"): st.session_state['coups'] = []
 
 # --- INTERFACE PRINCIPALE ---
-st.title("📊 GolfShot Analytics 5.0")
+st.title("🏌️‍♂️ GolfShot 6.0 : Practice vs Réalité")
 
-tab_saisie, tab_deep, tab_raw = st.tabs(["📝 Saisie Data", "📈 Analyses Avancées", "🗃️ Données Brutes"])
+tab_saisie, tab_duel, tab_dispersion = st.tabs(["📝 Saisie Avancée", "⚔️ Duel: Practice vs Parcours", "🎯 Graphique Dispersion"])
 
-# --- 1. SAISIE ENRICHIE ---
+# --- ONGLET 1 : SAISIE AVEC ÉCHELLE 0-5 ---
 with tab_saisie:
-    col1, col2, col3 = st.columns(3)
-    with col1:
+    col_mode, col_club = st.columns(2)
+    with col_mode:
+        mode_active = st.radio("Où êtes-vous ?", ["Parcours ⛳", "Practice 🚜"], horizontal=True)
+        mode_db = "Parcours" if "Parcours" in mode_active else "Practice"
+    with col_club:
         club = st.selectbox("Club", CLUBS_ORDER)
-    with col2:
-        mode = st.radio("Mode", ["Parcours", "Practice"], horizontal=True)
-        
+
     st.markdown("---")
     
     if club == "Putter":
-        c1, c2, c3 = st.columns(3)
-        with c1: dist = st.number_input("Dist (m)", 0.0, 25.0, 2.0, 0.1)
-        with c2: pente = st.selectbox("Pente", ["Plat", "Gauche-Droite", "Droite-Gauche"])
-        with c3: res = st.radio("Résultat", ["Dans le trou", "Raté"])
-        
-        if st.button("💾 Save Putt", type="primary"):
-            st.session_state['coups'].append({
-                'date': str(datetime.date.today()), 'mode': mode, 'club': club,
-                'distance': dist, 'pente': pente, 'resultat': res, 
-                'type_coup': 'Putt', 'green_touche': False
-            })
-            st.success("Putt enregistré")
-            
+        st.info("Saisie Putt standard (voir versions précédentes pour détails)")
+        # Saisie simplifiée pour l'exemple Putt
+        if st.button("Enregistrer Putt"):
+             st.session_state['coups'].append({'date': str(datetime.date.today()), 'mode': mode_db, 'club': 'Putter', 'type_coup': 'Putt', 'distance': 1, 'score_lateral':0})
+             st.success("Putt noté")
     else:
-        c1, c2, c3 = st.columns(3)
-        with c1: 
-            dist = st.number_input("Distance (m)", 0, 300, 135)
-            green_touche = st.checkbox("Green Touché (GIR) ?", value=False, help="Cochez si la balle a fini sur le green")
-        with c2: 
-            direction = st.radio("Axe", ["Gauche", "Centre", "Droite"], horizontal=True)
-        with c3: 
-            longueur = st.radio("Profondeur", ["Court", "Ok", "Long"], horizontal=True)
-            
-        if st.button(f"💾 Save {club}", type="primary"):
-            st.session_state['coups'].append({
-                'date': str(datetime.date.today()), 'mode': mode, 'club': club,
-                'distance': dist, 'direction': direction, 'longueur': longueur,
-                'resultat': f"{direction}/{longueur}", 'type_coup': 'Jeu Long',
-                'green_touche': green_touche
-            })
-            st.success("Coup enregistré")
+        # Saisie JEU LONG
+        c1, c2 = st.columns(2)
+        with c1:
+            dist = st.number_input("Distance (m)", 0, 320, 140)
+        with c2:
+            direction = st.radio("Direction", ["Gauche", "Centre", "Droite"], horizontal=True)
+        
+        # LA NOUVEAUTÉ : SLIDER 0-5
+        if direction != "Centre":
+            score_lat = st.slider("🔴 Sévérité de l'écart (0 = Axe, 5 = Catastrophe)", 1, 5, 2)
+            st.caption("1: Bord de Green | 3: Rough/Bunker | 5: Hors Limites/Perdu")
+        else:
+            score_lat = 0
+            st.success("✅ Plein Axe (Score: 0)")
 
-# --- 2. ANALYSE EXPERT ---
-with tab_deep:
+        if st.button(f"Valider {club} ({mode_db})", type="primary"):
+            st.session_state['coups'].append({
+                'date': str(datetime.date.today()),
+                'mode': mode_db,
+                'club': club,
+                'distance': dist,
+                'direction': direction,
+                'score_lateral': score_lat, # Le fameux 0-5
+                'type_coup': 'Jeu Long',
+                'longueur': 'Ok' # Simplifié pour cet exemple
+            })
+            st.success(f"Coup enregistré avec score de dispersion : {score_lat}")
+
+# --- ONGLET 2 : COMPARATEUR PRACTICE vs PARCOURS ---
+with tab_duel:
     if not st.session_state['coups']:
-        st.info("En attente de données...")
+        st.info("Entrez des données dans les deux modes pour comparer.")
     else:
         df = pd.DataFrame(st.session_state['coups'])
+        df = df[df['type_coup'] == 'Jeu Long'] # On analyse pas le putt ici
         
-        # SECTION 1 : PUTTING PRO STATS
-        st.markdown("### 🟢 Putting Performance Curve")
-        df_putt = df[df['type_coup'] == 'Putt'].copy()
+        st.header("⚔️ La Vérité du Terrain")
         
-        if not df_putt.empty:
-            # Création de "Buckets" (Intervalles de distance)
-            bins = [0, 1.5, 3, 6, 10, 20]
-            labels = ["0-1.5m", "1.5-3m", "3-6m", "6-10m", "+10m"]
-            df_putt['zone'] = pd.cut(df_putt['distance'], bins=bins, labels=labels)
+        club_comp = st.selectbox("Choisir le club à comparer", df['club'].unique())
+        
+        subset = df[df['club'] == club_comp]
+        
+        # Séparation des données
+        df_prac = subset[subset['mode'] == 'Practice']
+        df_parc = subset[subset['mode'] == 'Parcours']
+        
+        if not df_prac.empty and not df_parc.empty:
+            col_a, col_b, col_c = st.columns(3)
             
-            # Calcul du % de réussite par zone
-            stats_putt = df_putt.groupby('zone', observed=False)['resultat'].apply(lambda x: (x=='Dans le trou').mean() * 100).reset_index()
-            stats_putt.columns = ['Zone', 'Reussite_Pct']
+            # 1. Comparaison Distance
+            avg_prac = df_prac['distance'].mean()
+            avg_parc = df_parc['distance'].mean()
+            delta_dist = avg_parc - avg_prac
             
-            col_g, col_d = st.columns([2, 1])
-            with col_g:
-                st.bar_chart(stats_putt.set_index('Zone'))
-            with col_d:
-                st.dataframe(stats_putt.style.format({'Reussite_Pct': "{:.1f}%"}))
-                st.caption("Comparez ces chiffres aux pros (ex: 0-1.5m > 90% attendu).")
+            col_a.metric("Distance Practice", f"{avg_prac:.1f}m")
+            col_a.metric("Distance Parcours", f"{avg_parc:.1f}m", f"{delta_dist:.1f}m", delta_color="normal")
+            
+            # 2. Comparaison Dispersion Moyenne (Note 0-5)
+            disp_prac = df_prac['score_lateral'].mean()
+            disp_parc = df_parc['score_lateral'].mean()
+            delta_disp = disp_prac - disp_parc # Si négatif, c'est que parcours est pire (chiffre plus haut)
+            
+            col_b.metric("Dispersion Practice (0-5)", f"{disp_prac:.1f}")
+            col_b.metric("Dispersion Parcours (0-5)", f"{disp_parc:.1f}", f"{delta_disp:.1f}", delta_color="inverse")
+            
+            # 3. Analyse
+            with col_c:
+                st.write("### Analyse")
+                if avg_prac > avg_parc + 10:
+                    st.warning(f"⚠️ Vous perdez **{int(avg_prac - avg_parc)}m** sur le parcours ! Probablement un manque d'engagement ou des lies difficiles.")
+                elif disp_parc > disp_prac + 1:
+                    st.error("⚠️ Votre dispersion explose sur le parcours. Le stress ou l'alignement sont en cause.")
+                else:
+                    st.success("👏 Vos performances sont transférées efficacement du practice au parcours.")
         else:
-            st.warning("Pas assez de putts.")
+            st.warning(f"Il faut des données de '{club_comp}' à la fois en Practice et sur Parcours.")
 
-        st.markdown("---")
-
-        # SECTION 2 : GIR & PRÉCISION PAR CLUB
-        st.markdown("### 🎯 Analyse Green in Regulation (GIR)")
-        df_shots = df[df['type_coup'] == 'Jeu Long'].copy()
-        
-        if not df_shots.empty:
-            # Filtre : On ne garde que les fers et wedges pour le GIR
-            clubs_approche = [c for c in CLUBS_ORDER if "Fer" in c or "PW" in c or "°" in c]
-            df_app = df_shots[df_shots['club'].isin(clubs_approche)]
-            
-            if not df_app.empty:
-                # KPI : % de GIR par Club
-                gir_stats = df_app.groupby('club')['green_touche'].mean() * 100
-                
-                st.write("Pourcentage de Greens touchés par club :")
-                st.bar_chart(gir_stats)
-                
-                # KPI : Dispersion moyenne (approximation via labels)
-                # On considère "Centre/Ok" comme précis.
-                df_app['is_precise'] = ((df_app['direction']=='Centre') & (df_app['longueur']=='Ok'))
-                precision_stats = df_app.groupby('club')['is_precise'].mean() * 100
-                
-                with st.expander("Voir les détails chiffrés (GIR & Précision)"):
-                    summary = pd.concat([gir_stats, precision_stats], axis=1)
-                    summary.columns = ['% GIR', '% Impact Parfait']
-                    st.dataframe(summary.style.format("{:.1f}%").background_gradient(cmap="Greens"))
-            else:
-                st.info("Ajoutez des coups de fers pour voir l'analyse GIR.")
-
-        # SECTION 3 : CONSISTANCE DES DISTANCES (Histogramme)
-        st.markdown("---")
-        st.markdown("### 📏 Consistance & Étalonnage")
-        club_select = st.selectbox("Analyser la régularité du :", df_shots['club'].unique())
-        
-        subset = df_shots[df_shots['club'] == club_select]
-        if len(subset) > 1:
-            fig, ax = plt.subplots(figsize=(8, 3))
-            ax.hist(subset['distance'], bins=10, color='skyblue', edgecolor='black')
-            ax.set_title(f"Distribution des distances : {club_select}")
-            ax.set_xlabel("Distance (m)")
-            ax.set_ylabel("Fréquence")
-            
-            # Lignes Moyenne et Médiane
-            mean_val = subset['distance'].mean()
-            ax.axvline(mean_val, color='red', linestyle='dashed', linewidth=1, label=f'Moy: {mean_val:.1f}m')
-            ax.legend()
-            
-            st.pyplot(fig)
-            st.caption("Plus la courbe est étroite et haute, plus vous êtes régulier.")
-
-# --- 3. DONNÉES BRUTES (POUR EXCEL) ---
-with tab_raw:
-    st.markdown("### 🗃️ Base de données complète")
-    st.markdown("Utilisez les filtres ci-dessous pour explorer vos données, puis exportez en CSV via le menu de gauche.")
+# --- ONGLET 3 : GRAPHIQUE DISPERSION AVANCÉ ---
+with tab_dispersion:
+    st.header("🎯 Analyse Fine de la Dispersion")
     
     if st.session_state['coups']:
-        df_all = pd.DataFrame(st.session_state['coups'])
+        df = pd.DataFrame(st.session_state['coups'])
+        df_graph = df[df['type_coup'] == 'Jeu Long']
         
-        # Filtres dynamiques
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            f_club = st.multiselect("Filtrer par Club", df_all['club'].unique())
-        with col_f2:
-            f_type = st.multiselect("Type de coup", df_all['type_coup'].unique())
+        filter_club = st.selectbox("Club pour Graphique", df_graph['club'].unique(), key="graph_club")
+        data_plot = df_graph[df_graph['club'] == filter_club]
+        
+        if not data_plot.empty:
+            # Préparation du Graphique
+            fig, ax = plt.subplots(figsize=(10, 6))
             
-        # Application des filtres
-        df_show = df_all.copy()
-        if f_club: df_show = df_show[df_show['club'].isin(f_club)]
-        if f_type: df_show = df_show[df_show['type_coup'].isin(f_type)]
-        
-        st.dataframe(df_show, use_container_width=True)
-        st.metric("Nombre de données filtrées", len(df_show))
+            # Calcul des coordonnées X (Latéral) basé sur le score 0-5
+            # Si Gauche : X = -Score. Si Droite : X = +Score. Si Centre : X = 0.
+            def get_x_coord(row):
+                val = row['score_lateral']
+                # Petit bruit aléatoire pour éviter que les points se montent dessus
+                jitter = np.random.normal(0, 0.15) 
+                if row['direction'] == 'Gauche': return (val * -1) + jitter
+                if row['direction'] == 'Droite': return val + jitter
+                return 0 + jitter
+
+            data_plot['x_val'] = data_plot.apply(get_x_coord, axis=1)
+            
+            # On sépare les couleurs par Mode
+            prac_p = data_plot[data_plot['mode'] == 'Practice']
+            parc_p = data_plot[data_plot['mode'] == 'Parcours']
+            
+            # Plot Practice (Bleu, ronds)
+            ax.scatter(prac_p['x_val'], prac_p['distance'], c='blue', alpha=0.5, label='Practice', s=80, edgecolors='white')
+            # Plot Parcours (Rouge, croix)
+            ax.scatter(parc_p['x_val'], parc_p['distance'], c='red', alpha=0.7, marker='X', label='Parcours', s=100)
+            
+            # Esthétique
+            ax.axvline(0, color='green', linestyle='--', alpha=0.5, label="Axe Idéal")
+            ax.set_xlabel("⟵ Gauche (Score 5-1)  |  Centre (0)  |  Droite (Score 1-5) ⟶")
+            ax.set_ylabel("Distance (mètres)")
+            ax.set_xlim(-6, 6) # Echelle fixe pour bien voir le 0-5
+            ax.legend()
+            ax.grid(True, alpha=0.3)
+            
+            st.pyplot(fig)
+            st.caption("Les croix ROUGES sont vos coups sur le parcours. Les ronds BLEUS au practice. Plus on s'éloigne du centre (0), plus le coup est raté.")
+            
+        else:
+            st.write("Pas de données pour ce club.")
