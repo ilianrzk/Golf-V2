@@ -3,19 +3,34 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from matplotlib.patches import Ellipse, Circle
+from matplotlib.patches import Ellipse, Circle, Rectangle
 import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 30.0 Smart Performance", layout="wide")
+st.set_page_config(page_title="GolfShot 31.0 Visual Simulator", layout="wide")
 
-# --- CSS ---
+# --- CSS CORRIGÉ (CADDIE LISIBLE) ---
 st.markdown("""
 <style>
-    .metric-card {background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;}
+    .metric-card {
+        background-color: #f0f2f6; 
+        padding: 10px; 
+        border-radius: 5px; 
+        margin-bottom: 10px;
+    }
     h4 {color: #1565C0;}
     .stButton>button {width: 100%;}
-    .caddie-box {border: 2px solid #4CAF50; padding: 10px; border-radius: 10px; background-color: #E8F5E9; text-align: center;}
+    
+    /* CORRECTION CADDIE : Texte forcé en vert foncé */
+    .caddie-box {
+        border: 2px solid #2E7D32; 
+        padding: 15px; 
+        border-radius: 10px; 
+        background-color: #E8F5E9; 
+        color: #1B5E20 !important; /* Force la couleur foncée */
+        text-align: center;
+        font-weight: bold;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -103,9 +118,9 @@ if st.session_state['coups']:
 
 st.sidebar.markdown("---")
 
-# 3. SMART CADDIE
+# 3. SMART CADDIE (CSS CORRIGÉ)
 st.sidebar.header("🤖 Smart Caddie")
-with st.sidebar.expander("Ouvrir l'assistant", expanded=False):
+with st.sidebar.expander("Ouvrir l'assistant", expanded=True): # Ouvert par défaut pour tester
     cad_dist = st.number_input("Distance au drapeau (m)", 50, 250, 135)
     cad_lie = st.selectbox("Lie", ["Tee", "Fairway", "Rough", "Bunker"])
     
@@ -123,19 +138,20 @@ with st.sidebar.expander("Ouvrir l'assistant", expanded=False):
             dist_rec = best_match.iloc[0]['distance']
             st.markdown(f"""
             <div class="caddie-box">
-                <b>Conseil : Jouez le {club_rec}</b><br>
-                Moyenne historique : {dist_rec:.1f}m
+                💡 CONSEIL CADDIE<br>
+                <b>Jouez le {club_rec}</b><br>
+                <small>Moyenne : {dist_rec:.1f}m</small>
             </div>
             """, unsafe_allow_html=True)
         else:
             st.warning("Pas assez de données.")
     else:
-        st.warning("Entrez des données pour activer le Caddie.")
+        st.warning("Entrez des données.")
 
 st.sidebar.markdown("---")
 
 # GÉNÉRATEUR DE DONNÉES
-if st.sidebar.button("Générer Données V30 (Test)"):
+if st.sidebar.button("Générer Données V31 (Test)"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(180)]
     
@@ -176,11 +192,11 @@ if st.sidebar.button("Générer Données V30 (Test)"):
         new_data.append(base_entry)
             
     st.session_state['coups'].extend(new_data)
-    st.sidebar.success("Données V30 générées !")
+    st.sidebar.success("Données V31 générées !")
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v30.csv", "text/csv")
+    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v31.csv", "text/csv")
 
 if st.sidebar.button("🗑️ Reset Tout"): 
     st.session_state['coups'] = []
@@ -189,12 +205,12 @@ if st.sidebar.button("🗑️ Reset Tout"):
     st.session_state['sim_state']['active'] = False
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 30.0 : Smart Performance")
+st.title("🏌️‍♂️ GolfShot 31.0 : Visual Simulator")
 
 tab_parcours, tab_practice, tab_simu, tab_combine, tab_dna, tab_sac, tab_putt = st.tabs([
     "⛳ Parcours", 
     "🚜 Practice",
-    "🎮 Simulateur",
+    "🎮 Simulateur Visuel",
     "🏆 Combine",
     "🧬 Club DNA", 
     "🎒 Mapping",
@@ -368,37 +384,76 @@ with tab_practice:
         st.success("OK")
 
 # ==================================================
-# ONGLET 3 : SIMULATEUR
+# ONGLET 3 : SIMULATEUR (VISUEL & LOGIQUE 5M)
 # ==================================================
 with tab_simu:
     st.header("🎮 Simulateur")
     sim = st.session_state['sim_state']
+    
+    col_sim_viz, col_sim_act = st.columns([1, 2])
+    
     if not sim['active']:
-        if st.button("⛳ Commencer"):
+        if col_sim_act.button("⛳ Commencer"):
             par = np.random.choice([3, 4, 5])
             dist = {3: 130, 4: 360, 5: 480}[par] + np.random.randint(-20, 20)
             st.session_state['sim_state'] = {'active': True, 'hole_num': sim['hole_num'], 'par': par, 'total_dist': dist, 'remaining': dist, 'shots': 0, 'history': []}
             st.rerun()
     else:
-        st.info(f"Trou {sim['hole_num']} | Par {sim['par']} | {sim['total_dist']}m")
-        st.metric("Reste", f"{sim['remaining']}m")
-        c1, c2 = st.columns(2)
-        with c1: s_club = st.selectbox("Club", CLUBS_ORDER, key="s_club")
-        with c2: s_dist = st.number_input("Distance", 0, 300, min(int(sim['remaining']), 250), key="s_dist")
-        if st.button("Frapper"):
-            sim['shots'] += 1
-            sim['remaining'] -= s_dist
-            st.session_state['coups'].append({
-                'date': str(datetime.date.today()), 'mode': 'Practice', 'club': s_club,
-                'strat_dist': sim['remaining'] + s_dist, 'distance': s_dist, 'type_coup': 'Jeu Long',
-                'score_lateral': 0, 'direction': 'Centre', 'resultat_putt': 'N/A', 'strat_type': 'Simulateur'
-            })
-            if sim['remaining'] <= 0:
-                st.balloons()
-                st.success(f"Fini en {sim['shots']} !")
-                sim['active'] = False
-                sim['hole_num'] += 1
-            st.rerun()
+        # PARTIE GAUCHE : VISUALISATION
+        with col_sim_viz:
+            # Dessin du trou
+            fig_sim, ax_sim = plt.subplots(figsize=(3, 6))
+            # Fairway (Vert clair)
+            ax_sim.add_patch(Rectangle((-20, 0), 40, sim['total_dist'], color='#C8E6C9'))
+            # Green (Vert foncé)
+            ax_sim.add_patch(Circle((0, sim['total_dist']), 15, color='#66BB6A'))
+            # Drapeau
+            ax_sim.plot(0, sim['total_dist'], 'r^', markersize=10) 
+            # Balle (Position Actuelle)
+            current_pos = sim['total_dist'] - sim['remaining']
+            ax_sim.plot(0, current_pos, 'wo', markersize=10, markeredgecolor='black', label='Balle')
+            
+            ax_sim.set_xlim(-30, 30)
+            ax_sim.set_ylim(-10, sim['total_dist'] + 20)
+            ax_sim.axis('off') # Pas d'axes, juste le dessin
+            st.pyplot(fig_sim)
+
+        # PARTIE DROITE : ACTION
+        with col_sim_act:
+            st.info(f"Trou {sim['hole_num']} | Par {sim['par']} | {sim['total_dist']}m")
+            st.metric("Distance Restante", f"{sim['remaining']:.1f}m")
+            
+            # Club recommandé
+            rec_club = "Driver"
+            for c in reversed(CLUBS_ORDER):
+                if DIST_REF.get(c, 0) <= sim['remaining'] + 10:
+                    rec_club = c
+                    break
+            if sim['remaining'] < 20: rec_club = "Putter"
+            st.caption(f"Caddie suggère : {rec_club}")
+            
+            c1, c2 = st.columns(2)
+            with c1: s_club = st.selectbox("Club", CLUBS_ORDER, index=CLUBS_ORDER.index(rec_club) if rec_club in CLUBS_ORDER else 0, key="s_club")
+            with c2: s_dist = st.number_input("Distance faite", 0, 300, min(int(sim['remaining']), 250), key="s_dist")
+            
+            if st.button("Frapper"):
+                sim['shots'] += 1
+                sim['remaining'] -= s_dist
+                
+                # Enregistrement stats
+                st.session_state['coups'].append({
+                    'date': str(datetime.date.today()), 'mode': 'Practice', 'club': s_club,
+                    'strat_dist': sim['remaining'] + s_dist, 'distance': s_dist, 'type_coup': 'Jeu Long',
+                    'score_lateral': 0, 'direction': 'Centre', 'resultat_putt': 'N/A', 'strat_type': 'Simulateur'
+                })
+                
+                # Règle du < 5m
+                if sim['remaining'] <= 5:
+                    st.balloons()
+                    st.success(f"🎉 Donné ! Trou fini en {sim['shots']} coups.")
+                    sim['active'] = False
+                    sim['hole_num'] += 1
+                st.rerun()
 
 # ==================================================
 # ONGLET 4 : COMBINE
@@ -446,8 +501,10 @@ with tab_combine:
         if not df_c.empty:
             score_avg = df_c['points_test'].mean()
             st.metric("Score Moyen Combine", f"{score_avg:.0f} / 100")
+            
             sl = st.selectbox("Club Combine", df_c['club'].unique())
             subset = df_c[df_c['club'] == sl]
+            
             c_a1, c_a2 = st.columns(2)
             with c_a1:
                 fig, ax = plt.subplots()
