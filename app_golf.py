@@ -10,37 +10,23 @@ from fpdf import FPDF
 import io
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 34.0 Persistent Pro", layout="wide")
+st.set_page_config(page_title="GolfShot 35.0 Coach Report", layout="wide")
 
 # --- CSS ---
 st.markdown("""
 <style>
-    .metric-card {
-        background-color: #f0f2f6; 
-        padding: 10px; 
-        border-radius: 5px; 
-        margin-bottom: 10px;
-    }
+    .metric-card {background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;}
     h4 {color: #1565C0;}
     .stButton>button {width: 100%;}
-    
     .caddie-box {
-        border: 2px solid #2E7D32; 
-        padding: 15px; 
-        border-radius: 10px; 
-        background-color: #E8F5E9; 
-        color: #1B5E20 !important;
-        text-align: center;
-        font-weight: bold;
+        border: 2px solid #2E7D32; padding: 15px; border-radius: 10px; 
+        background-color: #E8F5E9; color: #1B5E20 !important; 
+        text-align: center; font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- FONCTION MANQUANTE RAJOUTÉE ICI ---
-def convert_df(df):
-    return df.to_csv(index=False).encode('utf-8')
-
-# --- 1. GESTION BASE DE DONNÉES (SQLITE) ---
+# --- 1. GESTION BASE DE DONNÉES ---
 def init_db():
     conn = sqlite3.connect('golf_database.db', check_same_thread=False)
     c = conn.cursor()
@@ -58,27 +44,19 @@ def init_db():
 conn = init_db()
 
 def add_coup_to_db(data):
-    # Sécurisation des clés manquantes
     keys = ['date', 'mode', 'club', 'strat_dist', 'distance', 'score_lateral', 'direction', 
             'type_coup', 'resultat_putt', 'delta_dist', 'points_test', 'err_longueur', 
             'lie', 'strat_effet', 'real_effet', 'amplitude', 'contact', 
             'dist_remain', 'strat_type', 'par_trou']
     for k in keys:
         if k not in data: data[k] = None
-
     c = conn.cursor()
-    c.execute('''INSERT INTO coups VALUES 
-                 (:date, :mode, :club, :strat_dist, :distance, :score_lateral, :direction,
-                  :type_coup, :resultat_putt, :delta_dist, :points_test, :err_longueur,
-                  :lie, :strat_effet, :real_effet, :amplitude, :contact, :dist_remain,
-                  :strat_type, :par_trou)''', data)
+    c.execute(f'''INSERT INTO coups VALUES ({','.join([':'+k for k in keys])})''', data)
     conn.commit()
 
 def load_coups_from_db():
-    try:
-        return pd.read_sql("SELECT * FROM coups", conn)
-    except:
-        return pd.DataFrame()
+    try: return pd.read_sql("SELECT * FROM coups", conn)
+    except: return pd.DataFrame()
 
 def add_partie_to_db(data):
     c = conn.cursor()
@@ -86,53 +64,143 @@ def add_partie_to_db(data):
     conn.commit()
 
 def load_parties_from_db():
-    try:
-        return pd.read_sql("SELECT * FROM parties", conn)
-    except:
-        return pd.DataFrame()
+    try: return pd.read_sql("SELECT * FROM parties", conn)
+    except: return pd.DataFrame()
 
-# --- 2. GÉNÉRATEUR PDF ---
+# --- 2. GÉNÉRATEUR PDF PRO (NOUVEAU MOTEUR) ---
 class PDF(FPDF):
     def header(self):
-        self.set_font('Arial', 'B', 15)
-        self.cell(0, 10, 'GolfShot - Rapport de Performance', 0, 1, 'C')
-        self.ln(5)
+        self.set_font('Arial', 'B', 16)
+        self.cell(0, 10, 'GolfShot Analytics - Rapport Technique', 0, 1, 'C')
+        self.set_font('Arial', 'I', 10)
+        self.cell(0, 10, f"Genere le {datetime.date.today()}", 0, 1, 'C')
+        self.line(10, 30, 200, 30)
+        self.ln(10)
 
-def create_pdf_report(df_coups, df_parties):
+    def chapter_title(self, label):
+        self.set_font('Arial', 'B', 14)
+        self.set_fill_color(230, 230, 230)
+        self.cell(0, 10, label, 0, 1, 'L', 1)
+        self.ln(4)
+
+    def chapter_body(self, body):
+        self.set_font('Arial', '', 11)
+        self.multi_cell(0, 6, body)
+        self.ln()
+
+def create_pro_pdf(df_coups, df_parties):
     pdf = PDF()
     pdf.add_page()
-    pdf.set_font('Arial', '', 12)
     
-    pdf.set_font('Arial', 'B', 12)
-    pdf.cell(0, 10, f"Date du rapport : {datetime.date.today()}", 0, 1)
-    pdf.ln(5)
+    # --- SECTION 1 : RESUME EXECUTIF ---
+    pdf.chapter_title("1. RESUME DE PERFORMANCE")
     
-    pdf.set_fill_color(200, 220, 255)
-    pdf.cell(0, 10, "1. GLOBAL", 1, 1, 'L', 1)
-    pdf.set_font('Arial', '', 11)
-    
-    if not df_coups.empty:
-        pdf.cell(0, 8, f"Total coups : {len(df_coups)}", 0, 1)
-        df_d = df_coups[df_coups['club'] == 'Driver']
-        if not df_d.empty:
-            pdf.cell(0, 8, f"Moyenne Driver : {df_d['distance'].mean():.1f}m", 0, 1)
-    
+    nb_total = len(df_coups)
     if not df_parties.empty:
-        pdf.cell(0, 8, f"Dernier Score : {df_parties.iloc[-1]['score']}", 0, 1)
+        avg_score = df_parties['score'].mean()
+        avg_putts = df_parties['putts'].mean()
+        best_score = df_parties['score'].min()
+        txt_score = f"Score Moyen: {avg_score:.1f} | Meilleur: {best_score} | Moy. Putts: {avg_putts:.1f}"
+    else:
+        txt_score = "Aucune partie complete enregistree."
+        
+    pdf.chapter_body(f"Volume de jeu analyse : {nb_total} coups.\n{txt_score}")
+    
+    # --- SECTION 2 : GAPPING & DISPERSION (TABLEAU TECHNIQUE) ---
+    pdf.chapter_title("2. TABLEAU D'ETALONNAGE (GAPPING)")
+    
+    pdf.set_font('Arial', 'B', 10)
+    # En-têtes
+    pdf.cell(30, 8, 'Club', 1)
+    pdf.cell(30, 8, 'Moyenne (m)', 1)
+    pdf.cell(30, 8, 'Max (m)', 1)
+    pdf.cell(30, 8, 'Dispersion', 1) # Ecart Type
+    pdf.cell(40, 8, 'Efficacite (%)', 1)
+    pdf.ln()
+    
+    pdf.set_font('Arial', '', 10)
+    
+    # Filtre Jeu Long uniquement
+    df_long = df_coups[df_coups['type_coup'] == 'Jeu Long']
+    
+    # Ordre des clubs
+    club_order_pdf = ["Driver", "Bois 5", "Hybride", "Fer 3", "Fer 5", "Fer 6", "Fer 7", "Fer 8", "Fer 9", "PW", "50°", "55°", "60°"]
+    
+    for club in club_order_pdf:
+        stats = df_long[df_long['club'] == club]
+        if not stats.empty and len(stats) > 1:
+            avg = stats['distance'].mean()
+            maxx = stats['distance'].max()
+            std = stats['distance'].std()
+            eff = (avg / maxx * 100) if maxx > 0 else 0
+            
+            pdf.cell(30, 8, str(club), 1)
+            pdf.cell(30, 8, f"{avg:.1f}", 1)
+            pdf.cell(30, 8, f"{maxx:.1f}", 1)
+            pdf.cell(30, 8, f"+/- {std:.1f}", 1)
+            pdf.cell(40, 8, f"{eff:.0f}%", 1)
+            pdf.ln()
     
     pdf.ln(5)
-    pdf.set_font('Arial', 'B', 12)
-    pdf.set_fill_color(255, 200, 200)
-    pdf.cell(0, 10, "2. A TRAVAILLER", 1, 1, 'L', 1)
+    pdf.set_font('Arial', 'I', 9)
+    pdf.write(5, "Note Coach: Une efficacite < 85% indique des contacts irreguliers (smash factor). Une dispersion > 15m est critique.")
+    pdf.ln(10)
+
+    # --- SECTION 3 : ANALYSE DES FAUTES (MISS PATTERN) ---
+    pdf.chapter_title("3. DIAGNOSTIC DES FAUTES")
     pdf.set_font('Arial', '', 11)
     
-    if not df_coups.empty:
-        misses = df_coups[df_coups['err_longueur'] != 'Bonne Longueur']
+    if not df_long.empty:
+        # Erreur Longueur
+        miss_L = df_long[df_long['err_longueur'] != 'Bonne Longueur']
+        if not miss_L.empty:
+            top_L = miss_L['err_longueur'].value_counts(normalize=True).idxmax()
+            pct_L = miss_L['err_longueur'].value_counts(normalize=True).max() * 100
+            pdf.cell(0, 8, f">> Tendance Longueur : {top_L} ({pct_L:.0f}% des erreurs)", 0, 1)
+        
+        # Erreur Latérale
+        miss_Lat = df_long[df_long['direction'] != 'Centre']
+        if not miss_Lat.empty:
+            top_Lat = miss_Lat['direction'].value_counts(normalize=True).idxmax()
+            pct_Lat = miss_Lat['direction'].value_counts(normalize=True).max() * 100
+            pdf.cell(0, 8, f">> Tendance Laterale : {top_Lat} ({pct_Lat:.0f}% des erreurs)", 0, 1)
+            
+        # Contact
+        miss_cont = df_long[df_long['contact'] != 'Bon']
+        if not miss_cont.empty:
+            top_cont = miss_cont['contact'].value_counts().idxmax()
+            pdf.cell(0, 8, f">> Probleme de Contact Majeur : {top_cont}", 0, 1)
+
+    pdf.ln(5)
+
+    # --- SECTION 4 : PUTTING ---
+    pdf.chapter_title("4. PERFORMANCE PUTTING")
+    df_putt = df_coups[df_coups['type_coup'] == 'Putt'].copy()
+    
+    if not df_putt.empty:
+        # Stats par zone
+        df_putt['Zone'] = pd.cut(df_putt['strat_dist'], bins=[0, 2, 5, 10, 30], labels=["Court (0-2m)", "Moyen (2-5m)", "Long (5-10m)", "Lag (+10m)"])
+        df_putt['Reussite'] = df_putt['resultat_putt'] == "Dans le trou"
+        
+        grouped = df_putt.groupby('Zone', observed=False)['Reussite'].mean() * 100
+        
+        pdf.set_font('Arial', 'B', 10)
+        pdf.cell(40, 8, "Zone", 1)
+        pdf.cell(40, 8, "% Reussite", 1)
+        pdf.ln()
+        pdf.set_font('Arial', '', 10)
+        
+        for zone, score in grouped.items():
+            pdf.cell(40, 8, zone, 1)
+            pdf.cell(40, 8, f"{score:.1f}%", 1)
+            pdf.ln()
+            
+        # Miss Pattern Putting
+        misses = df_putt[df_putt['resultat_putt'] != "Dans le trou"]
         if not misses.empty:
-            try:
-                top_m = misses['err_longueur'].mode()[0]
-                pdf.cell(0, 8, f"Tendance Faute : {top_m}", 0, 1)
-            except: pass
+            pdf.ln(5)
+            top_miss = misses['resultat_putt'].mode()[0]
+            pdf.multi_cell(0, 5, f"Faute dominante au putting : {top_miss}. \n(Indique un probleme recurrent de lecture ou de dosage).")
 
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
@@ -169,14 +237,14 @@ if uploaded_file is not None:
         df_loaded = pd.read_csv(uploaded_file)
         for _, row in df_loaded.iterrows():
             add_coup_to_db(row.to_dict())
-        st.session_state['coups'] = load_coups_from_db().to_dict('records') # Refresh state
-        st.sidebar.success("Importé et fusionné en Base de Données !")
+        st.session_state['coups'] = load_coups_from_db().to_dict('records')
+        st.sidebar.success("Importé !")
         st.rerun()
     except Exception as e: st.sidebar.error(f"Erreur : {e}")
 
 st.sidebar.markdown("---")
 
-# 2. FILTRE TEMPOREL
+# 2. FILTRE
 st.sidebar.header("📅 Filtre Temporel")
 default_start = datetime.date(datetime.date.today().year, 1, 1)
 filter_start = st.sidebar.date_input("Du", default_start)
@@ -187,23 +255,25 @@ if st.session_state['coups']:
     df_raw = pd.DataFrame(st.session_state['coups'])
     df_raw['date_dt'] = pd.to_datetime(df_raw['date']).dt.date
     df_analysis = df_raw[(df_raw['date_dt'] >= filter_start) & (df_raw['date_dt'] <= filter_end)]
-    st.sidebar.caption(f"{len(df_analysis)} coups sur la période.")
+    st.sidebar.caption(f"{len(df_analysis)} coups analysés.")
 
-# 3. RAPPORT PDF
-if st.sidebar.button("📄 Générer Rapport PDF"):
+# 3. RAPPORT PDF PRO (BOUTON)
+if st.sidebar.button("📄 Télécharger Rapport Coach"):
     if not df_analysis.empty:
-        pdf_data = create_pdf_report(df_analysis, pd.DataFrame(st.session_state['parties']))
-        st.sidebar.download_button("📥 Télécharger PDF", pdf_data, "golf_report.pdf", "application/pdf")
+        try:
+            pdf_bytes = create_pro_pdf(df_analysis, pd.DataFrame(st.session_state['parties']))
+            st.sidebar.download_button("📥 PDF Ready", pdf_bytes, "Rapport_Coach_Golf.pdf", "application/pdf")
+        except Exception as e:
+            st.sidebar.error(f"Erreur PDF : {e}")
     else: st.sidebar.error("Pas de données.")
 
 st.sidebar.markdown("---")
 
-# 4. SMART CADDIE
+# 4. CADDIE (Auto-Refresh)
 st.sidebar.header("🤖 Smart Caddie")
-with st.sidebar.expander("Assistant de Club", expanded=True):
+with st.sidebar.expander("Assistant", expanded=True):
     cad_dist = st.number_input("Distance (m)", 50, 250, 135, step=5)
     cad_lie = st.selectbox("Lie", ["Tee", "Fairway", "Rough", "Bunker"])
-    
     if not df_analysis.empty:
         df_caddie = df_analysis[df_analysis['type_coup'] == 'Jeu Long']
         df_lie = df_caddie[df_caddie['lie'] == cad_lie]
@@ -217,11 +287,10 @@ with st.sidebar.expander("Assistant de Club", expanded=True):
                 st.markdown(f"<div class='caddie-box'>💡 {rec['club']}<br><small>Moy: {rec['distance']:.1f}m</small></div>", unsafe_allow_html=True)
             else: st.warning("?")
         else: st.warning("Manque de données")
-    else: st.warning("Données requises.")
+    else: st.warning("Données requises")
 
 st.sidebar.markdown("---")
-# 5. GENERATEUR TEST
-if st.sidebar.button("Injecter Données Test V34"):
+if st.sidebar.button("Injecter Données Test V35"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(60)]
     for _ in range(200):
@@ -242,26 +311,20 @@ if st.sidebar.button("Injecter Données Test V34"):
             t = DIST_REF[club]
             r = np.random.normal(t, 10)
             entry.update({'strat_dist': t, 'distance': r, 'score_lateral': np.random.randint(0,3), 'type_coup': 'Jeu Long'})
-        
         add_coup_to_db(entry)
-    
     st.session_state['coups'] = load_coups_from_db().to_dict('records')
-    st.sidebar.success("Données injectées en DB !")
+    st.sidebar.success("Données injectées !")
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Backup CSV", convert_df(df_ex), "golf_v34_backup.csv", "text/csv")
+    st.sidebar.download_button("📥 Backup CSV", convert_df(df_ex), "golf_v35_backup.csv", "text/csv")
 
-if st.sidebar.button("⚠️ Vider Base de Données"):
-    conn.execute("DELETE FROM coups")
-    conn.execute("DELETE FROM parties")
-    conn.commit()
-    st.session_state['coups'] = []
-    st.session_state['parties'] = []
-    st.rerun()
+if st.sidebar.button("⚠️ Vider DB"):
+    conn.execute("DELETE FROM coups"); conn.execute("DELETE FROM parties"); conn.commit()
+    st.session_state['coups'] = []; st.session_state['parties'] = []; st.rerun()
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 34.0 : Persistent Pro")
+st.title("🏌️‍♂️ GolfShot 35.0 : Coach Report Edition")
 
 tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt = st.tabs([
     "⛳ Parcours", "🚜 Practice", "🏆 Combine", "🧬 Club DNA", "🎒 Mapping", "🟢 Putting"
@@ -287,11 +350,10 @@ def plot_dispersion_analysis(ax, data, title, color):
             ell = Ellipse(xy=(data['x_viz'].mean(), data['distance'].mean()), width=np.sqrt(lambda_[0])*4, height=np.sqrt(lambda_[1])*4, angle=np.rad2deg(np.arccos(v[0, 0])), edgecolor=color, facecolor=color, alpha=0.15, linewidth=2)
             ax.add_artist(ell)
         except: pass
-    ax.set_title(title)
-    ax.set_xlabel("Gauche <---> Droite"); ax.set_ylabel("Distance"); ax.grid(True, alpha=0.3)
+    ax.set_title(title); ax.set_xlabel("Gauche <---> Droite"); ax.set_ylabel("Distance"); ax.grid(True, alpha=0.3)
 
 # ==================================================
-# ONGLET 1 : PARCOURS (DB CONNECTED)
+# ONGLET 1 : PARCOURS
 # ==================================================
 with tab_parcours:
     c1, c2 = st.columns([1, 1])
@@ -349,8 +411,9 @@ with tab_parcours:
             
             st.session_state['shots_on_current_hole'] += 1
             if club == "Putter": st.session_state['putts_on_current_hole'] += 1
-            st.session_state['current_card'].at[idx_hole, 'Score'] = st.session_state['shots_on_current_hole']
-            st.session_state['current_card'].at[idx_hole, 'Putts'] = st.session_state['putts_on_current_hole']
+            idx = st.session_state['current_hole'] - 1
+            st.session_state['current_card'].at[idx, 'Score'] = st.session_state['shots_on_current_hole']
+            st.session_state['current_card'].at[idx, 'Putts'] = st.session_state['putts_on_current_hole']
             
             if res_putt == "Dans le trou":
                 st.balloons()
@@ -385,7 +448,7 @@ with tab_parcours:
             st.success("Partie archivée !")
 
 # ==================================================
-# ONGLET 2 : PRACTICE (DB CONNECTED)
+# ONGLET 2 : PRACTICE
 # ==================================================
 with tab_practice:
     st.header("🚜 Practice")
@@ -414,10 +477,10 @@ with tab_practice:
         }
         add_coup_to_db(data)
         st.session_state['coups'].append(data)
-        st.success("Sauvegardé en DB !")
+        st.success("Sauvegardé !")
 
 # ==================================================
-# ONGLET 3 : COMBINE (DB CONNECTED)
+# ONGLET 3 : COMBINE
 # ==================================================
 with tab_combine:
     st.header("🏆 Combine")
@@ -466,7 +529,7 @@ with tab_combine:
             st.metric("Score Moyen", f"{df_c['points_test'].mean():.0f}/100")
 
 # ==================================================
-# ANALYSES (UTILISENT df_analysis)
+# ANALYSES
 # ==================================================
 with tab_dna:
     st.header("🧬 Club DNA")
