@@ -7,7 +7,7 @@ from matplotlib.patches import Ellipse, Circle
 import datetime
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 25.0 Final Polish", layout="wide")
+st.set_page_config(page_title="GolfShot 26.0 Ultimate Precision", layout="wide")
 
 # --- CSS ---
 st.markdown("""
@@ -51,7 +51,6 @@ SHOT_TYPES = [
     "Approche (<50m)", "Sortie de Bunker", "Recovery"
 ]
 
-# LISTE COMPLÈTE DES RATÉS
 PUTT_RESULTS = [
     "Dans le trou", 
     "Raté - Court", "Raté - Long", 
@@ -82,7 +81,7 @@ if uploaded_file is not None:
 
 st.sidebar.markdown("---")
 
-if st.sidebar.button("Générer Données V25 (Test)"):
+if st.sidebar.button("Générer Données V26 (Test)"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(30)]
     
@@ -90,19 +89,20 @@ if st.sidebar.button("Générer Données V25 (Test)"):
         mode = np.random.choice(["Parcours", "Practice", "Combine"], p=[0.6, 0.3, 0.1])
         club = np.random.choice(["Driver", "Fer 7", "Putter"])
         
+        # Score test simulé pour le Combine
+        points = np.random.randint(40, 95) if mode == "Combine" else 0
+        
         base_entry = {
             'date': str(np.random.choice(dates)), 'mode': mode, 'club': club,
             'strat_dist': 0, 'distance': 0, 'score_lateral': 0, 'direction': 'Centre',
             'strat_type': 'Entraînement', 'resultat_putt': 'N/A', 'delta_dist': 0, 
-            'points_test': 0, 'err_longueur': 'Bonne Longueur', 'lie': 'Fairway',
+            'points_test': points, 'err_longueur': 'Bonne Longueur', 'lie': 'Fairway',
             'strat_effet': 'N/A', 'real_effet': 'N/A', 'amplitude': 'Plein', 'contact': 'Bon'
         }
 
         if club == "Putter":
-            # Génération décimale pour les putts
             dist = round(np.random.uniform(0.5, 15.0), 1)
             res = "Dans le trou" if np.random.random() < 0.4 else np.random.choice(PUTT_RESULTS[1:])
-            
             base_entry.update({
                 'strat_dist': dist, 'distance': dist, 'resultat_putt': res, 
                 'type_coup': 'Putt', 'strat_type': 'Putt', 'lie': 'Green'
@@ -123,11 +123,11 @@ if st.sidebar.button("Générer Données V25 (Test)"):
         new_data.append(base_entry)
             
     st.session_state['coups'].extend(new_data)
-    st.sidebar.success("Données V25 générées !")
+    st.sidebar.success("Données V26 générées !")
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v25.csv", "text/csv")
+    st.sidebar.download_button("📥 Sauvegarder CSV", convert_df(df_ex), "golf_v26.csv", "text/csv")
 
 if st.sidebar.button("🗑️ Reset Tout"): 
     st.session_state['coups'] = []
@@ -140,7 +140,7 @@ if st.sidebar.button("🗑️ Reset Tout"):
     st.session_state['current_card']['Putts'] = 0
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 25.0 : Final Polish")
+st.title("🏌️‍♂️ GolfShot 26.0 : Ultimate Precision")
 
 tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt = st.tabs([
     "⛳ Parcours & Score", 
@@ -185,7 +185,6 @@ def plot_dispersion_analysis(ax, data, title, color):
 with tab_parcours:
     col_saisie, col_carte = st.columns([1, 1])
     
-    # --- A. SAISIE ---
     with col_saisie:
         st.header(f"Trou {st.session_state['current_hole']}")
         idx_hole = st.session_state['current_hole'] - 1
@@ -195,21 +194,18 @@ with tab_parcours:
 
         club = st.selectbox("Club", CLUBS_ORDER, key="p_club")
         
-        # RESTAURATION INTENTION / RÉALITÉ
         st.markdown("---")
         c_int, c_real = st.columns(2)
         
-        # 1. INTENTION (Avant)
+        # 1. INTENTION
         with c_int:
             st.subheader("🧠 Intention")
             if club == "Putter":
-                # VIRGULE POUR LE PUTT
                 obj_dist = st.number_input("Dist. Cible (m)", 0.0, 30.0, 1.5, 0.1, format="%.1f", key="p_obj_putt")
                 strat_effet = "N/A"
                 shot_type = "Putt"
             else:
                 shot_type = st.selectbox("Type", SHOT_TYPES, key="p_type")
-                # Masquer cible si départ Par 4/5
                 if shot_type == "Départ (Tee Shot)" and current_par > 3:
                     obj_dist = 0.0
                     st.caption("🚀 Objectif : Max")
@@ -218,18 +214,15 @@ with tab_parcours:
                 
                 strat_effet = st.selectbox("Effet Voulu", ["Tout droit", "Fade", "Draw", "Balle Basse"], key="p_eff_v")
 
-        # 2. RÉALITÉ (Après)
+        # 2. RÉALITÉ
         with c_real:
             st.subheader("🎯 Réalité")
             if club == "Putter":
-                # PAS D'EFFET AU PUTTING
                 dist_real = st.number_input("Dist. Réelle (m)", 0.0, 30.0, obj_dist, 0.1, format="%.1f", key="p_real_putt")
                 res_putt = st.selectbox("Résultat", PUTT_RESULTS, key="p_res_putt")
-                
                 direction, score_lat, real_effet = "Centre", 0, "N/A"
             else:
                 dist_real = st.number_input("Réalisé (m)", 0, 350, int(obj_dist) if obj_dist>0 else 200, key="p_real_long")
-                # RETOUR EFFET RÉALISÉ
                 real_effet = st.selectbox("Effet Réalisé", ["Tout droit", "Fade", "Draw", "Push", "Pull", "Hook", "Slice", "Gratte", "Top"], key="p_eff_r")
                 
                 c_d1, c_d2 = st.columns(2)
@@ -237,7 +230,6 @@ with tab_parcours:
                 with c_d2: score_lat = st.slider("Écart (0-5)", 0, 5, 0, key="p_lat")
                 res_putt = "N/A"
 
-        # Validation
         if st.button("Valider Coup (+1 Score)", type="primary"):
             delta = dist_real - obj_dist if obj_dist > 0 else 0
             err_L = "Court" if delta < -5 else ("Long" if delta > 5 else "Bonne Longueur")
@@ -269,7 +261,6 @@ with tab_parcours:
             else:
                 st.success("Noté !")
 
-        # Naviguer
         c_prev, c_next = st.columns(2)
         if c_prev.button("<< Précédent"):
              if st.session_state['current_hole'] > 1:
@@ -282,7 +273,6 @@ with tab_parcours:
                 st.session_state['current_hole'] += 1
                 st.rerun()
 
-    # --- B. CARTE ---
     with col_carte:
         st.header("📋 Carte")
         edited_df = st.data_editor(
@@ -375,13 +365,16 @@ with tab_combine:
             st.session_state['combine_state'] = None
             st.rerun()
             
-    # Analyse Combine
     st.markdown("---")
     st.subheader("📊 Stats Combine")
     if st.session_state['coups']:
         df = pd.DataFrame(st.session_state['coups'])
         df_c = df[df['mode'] == 'Combine']
         if not df_c.empty:
+            # MODIFICATION DEMANDÉE : SCORE SUR 100
+            score_avg = df_c['points_test'].mean()
+            st.metric("Score Moyen Combine", f"{score_avg:.0f} / 100")
+            
             sl = st.selectbox("Club Combine", df_c['club'].unique())
             subset = df_c[df_c['club'] == sl]
             
@@ -420,9 +413,16 @@ with tab_dna:
                 if not sub[sub['mode']=='Parcours'].empty:
                     st.metric("Prof.", f"± {sub[sub['mode']=='Parcours']['distance'].std():.1f}m")
                     st.metric("Lat.", f"{sub[sub['mode']=='Parcours']['score_lateral'].mean():.1f}/5")
+            
+            st.subheader("Maîtrise des Effets")
+            df_eff = sub[sub['strat_effet'].isin(["Fade", "Draw", "Tout droit"])]
+            if not df_eff.empty:
+                df_eff['OK'] = df_eff.apply(lambda x: 1 if x['strat_effet'] in x['real_effet'] else 0, axis=1)
+                res = df_eff.groupby('strat_effet')['OK'].mean() * 100
+                st.dataframe(res.to_frame("% Réussite").style.background_gradient(cmap="Greens"), use_container_width=True)
 
 # ==================================================
-# ONGLET 5 : BAG MAPPING (FRANÇAIS)
+# ONGLET 5 : BAG MAPPING (COULEURS CORRIGÉES)
 # ==================================================
 with tab_sac:
     if st.session_state['coups']:
@@ -437,12 +437,18 @@ with tab_sac:
             st.pyplot(fig)
             
             stats = df_s.groupby('club', observed=True)['distance'].agg(['count', 'mean', 'max', 'std']).round(1)
-            # TRADUCTION FRANCAISE DEMANDÉE
             stats.columns = ['Nb Coups', 'Moyenne (m)', 'Max (m)', 'Écart Type (m)']
-            st.dataframe(stats.style.background_gradient(cmap="Blues"), use_container_width=True)
+            
+            # MODIFICATION DEMANDÉE : COULEURS SÉMANTIQUES
+            # Ecart Type : Vert = Bas (Bien), Rouge = Haut (Mal) -> RdYlGn_r (Reversed)
+            st.dataframe(
+                stats.style.background_gradient(cmap="Blues", subset=['Moyenne (m)', 'Max (m)'])
+                           .background_gradient(cmap="RdYlGn_r", subset=['Écart Type (m)']), 
+                use_container_width=True
+            )
 
 # ==================================================
-# ONGLET 6 : PUTTING (TABLEAU RATÉS)
+# ONGLET 6 : PUTTING (TABLEAU RESTAURÉ)
 # ==================================================
 with tab_putt:
     if st.session_state['coups']:
@@ -452,6 +458,19 @@ with tab_putt:
         if not df_p.empty:
             st.header("🟢 Analyse Putting")
             
+            # 1. STATS PAR ZONE (RESTAURÉ)
+            st.subheader("📊 Réussite par Zone")
+            df_p['Zone'] = pd.cut(df_p['strat_dist'], bins=[0, 2, 5, 10, 30], labels=["0-2m", "2-5m", "5-10m", "+10m"])
+            df_p['Success'] = df_p['resultat_putt'] == "Dans le trou"
+            
+            # Tableau Pivot coloré
+            piv = df_p.groupby('Zone', observed=False).agg(
+                Tentatives=('resultat_putt', 'count'),
+                Reussites=('Success', 'sum')
+            )
+            piv['% Réussite'] = (piv['Reussites'] / piv['Tentatives'] * 100).round(1)
+            st.dataframe(piv.style.background_gradient(cmap="RdYlGn", subset=['% Réussite']), use_container_width=True)
+
             c1, c2 = st.columns(2)
             with c1:
                 st.subheader("Boussole")
@@ -459,7 +478,6 @@ with tab_putt:
                     res = r['resultat_putt']
                     if "Dans" in res: return 0,0
                     x, y = 0, 0
-                    # Logique diagonales
                     if "Gauche" in res: x = -1
                     if "Droite" in res: x = 1
                     if "Court" in res: y = -1
@@ -473,13 +491,10 @@ with tab_putt:
                 st.pyplot(fig)
             
             with c2:
-                # AJOUT DEMANDÉ : TABLEAU DES RATÉS
-                st.subheader("Analyse des Ratés")
+                st.subheader("Causes des Ratés")
                 misses = df_p[df_p['resultat_putt'] != "Dans le trou"]
                 if not misses.empty:
                     cnt = misses['resultat_putt'].value_counts()
                     st.bar_chart(cnt)
-                    st.write(cnt)
                 else:
                     st.success("Aucun raté !")
-                
