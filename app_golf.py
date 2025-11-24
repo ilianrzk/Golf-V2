@@ -10,23 +10,33 @@ from fpdf import FPDF
 import io
 
 # --- CONFIGURATION ---
-st.set_page_config(page_title="GolfShot 35.0 Live Sync", layout="wide")
+st.set_page_config(page_title="GolfShot 36.0 Complete DNA", layout="wide")
 
 # --- CSS ---
 st.markdown("""
 <style>
-    .metric-card {background-color: #f0f2f6; padding: 10px; border-radius: 5px; margin-bottom: 10px;}
+    .metric-card {
+        background-color: #f0f2f6; 
+        padding: 10px; 
+        border-radius: 5px; 
+        margin-bottom: 10px;
+    }
     h4 {color: #1565C0;}
     .stButton>button {width: 100%;}
+    
     .caddie-box {
-        border: 2px solid #2E7D32; padding: 15px; border-radius: 10px; 
-        background-color: #E8F5E9; color: #1B5E20 !important; 
-        text-align: center; font-weight: bold;
+        border: 2px solid #2E7D32; 
+        padding: 15px; 
+        border-radius: 10px; 
+        background-color: #E8F5E9; 
+        color: #1B5E20 !important;
+        text-align: center;
+        font-weight: bold;
     }
 </style>
 """, unsafe_allow_html=True)
 
-# --- FONCTION UTILITAIRE (Celle qui manquait avant) ---
+# --- FONCTION UTILITAIRE ---
 def convert_df(df):
     return df.to_csv(index=False).encode('utf-8')
 
@@ -137,10 +147,11 @@ def create_pro_pdf(df_coups, df_parties):
             except: pass
     return pdf.output(dest='S').encode('latin-1', 'replace')
 
-# --- ETAT (CHARGEMENT SYNC DB) ---
-# On recharge systématiquement pour être à jour
-st.session_state['coups'] = load_coups_from_db().to_dict('records')
-st.session_state['parties'] = load_parties_from_db().to_dict('records')
+# --- ETAT (CHARGEMENT DB) ---
+if 'coups' not in st.session_state or not st.session_state['coups']:
+    st.session_state['coups'] = load_coups_from_db().to_dict('records')
+if 'parties' not in st.session_state or not st.session_state['parties']:
+    st.session_state['parties'] = load_parties_from_db().to_dict('records')
 
 if 'combine_state' not in st.session_state: st.session_state['combine_state'] = None
 
@@ -162,21 +173,22 @@ DIST_REF = {"Driver": 220, "Bois 5": 200, "Hybride": 180, "Fer 3": 170, "Fer 5":
 # ==================================================
 st.sidebar.title("⚙️ Data Lab")
 
+# 1. IMPORT
 uploaded_file = st.sidebar.file_uploader("📂 Importer CSV", type="csv")
 if uploaded_file is not None:
     try:
         df_loaded = pd.read_csv(uploaded_file)
         for _, row in df_loaded.iterrows():
             add_coup_to_db(row.to_dict())
-        st.sidebar.success("Données importées !")
+        st.session_state['coups'] = load_coups_from_db().to_dict('records')
+        st.sidebar.success("Importé !")
         st.rerun()
     except Exception as e: st.sidebar.error(f"Erreur : {e}")
 
 st.sidebar.markdown("---")
 
-# 2. FILTRE TEMPOREL (ELARGI PAR DEFAUT POUR VOIR LES DONNEES TEST)
+# 2. FILTRE TEMPOREL
 st.sidebar.header("📅 Filtre Temporel")
-# Fix: Date de début par défaut = 1er Janvier de l'année
 default_start = datetime.date(datetime.date.today().year, 1, 1)
 filter_start = st.sidebar.date_input("Du", default_start)
 filter_end = st.sidebar.date_input("Au", datetime.date.today())
@@ -184,21 +196,18 @@ filter_end = st.sidebar.date_input("Au", datetime.date.today())
 df_analysis = pd.DataFrame()
 if st.session_state['coups']:
     df_raw = pd.DataFrame(st.session_state['coups'])
-    if 'date' in df_raw.columns:
-        df_raw['date_dt'] = pd.to_datetime(df_raw['date']).dt.date
-        df_analysis = df_raw[(df_raw['date_dt'] >= filter_start) & (df_raw['date_dt'] <= filter_end)]
-        st.sidebar.caption(f"{len(df_analysis)} coups analysés.")
-    else:
-        st.sidebar.warning("Erreur structure de date.")
+    df_raw['date_dt'] = pd.to_datetime(df_raw['date']).dt.date
+    df_analysis = df_raw[(df_raw['date_dt'] >= filter_start) & (df_raw['date_dt'] <= filter_end)]
+    st.sidebar.caption(f"{len(df_analysis)} coups analysés.")
 
 # 3. RAPPORT PDF
-if st.sidebar.button("📄 Générer Rapport Coach"):
+if st.sidebar.button("📄 Générer Rapport PDF"):
     if not df_analysis.empty:
         try:
             pdf_bytes = create_pro_pdf(df_analysis, pd.DataFrame(st.session_state['parties']))
-            st.sidebar.download_button("📥 Télécharger PDF", pdf_bytes, "Rapport_Golf.pdf", "application/pdf")
+            st.sidebar.download_button("📥 Télécharger PDF", pdf_bytes, "Rapport_Coach_Golf.pdf", "application/pdf")
         except Exception as e: st.sidebar.error(f"Erreur PDF : {e}")
-    else: st.sidebar.error("Pas de données sur la période.")
+    else: st.sidebar.error("Pas de données.")
 
 st.sidebar.markdown("---")
 
@@ -207,7 +216,6 @@ st.sidebar.header("🤖 Smart Caddie")
 with st.sidebar.expander("Assistant", expanded=True):
     cad_dist = st.number_input("Distance (m)", 50, 250, 135, step=5)
     cad_lie = st.selectbox("Lie", ["Tee", "Fairway", "Rough", "Bunker"])
-    
     if not df_analysis.empty:
         df_caddie = df_analysis[df_analysis['type_coup'] == 'Jeu Long']
         df_lie = df_caddie[df_caddie['lie'] == cad_lie]
@@ -220,11 +228,11 @@ with st.sidebar.expander("Assistant", expanded=True):
                 rec = best.iloc[0]
                 st.markdown(f"<div class='caddie-box'>💡 {rec['club']}<br><small>Moy: {rec['distance']:.1f}m</small></div>", unsafe_allow_html=True)
             else: st.warning("?")
-        else: st.warning("Manque de données")
-    else: st.warning("Données requises")
+        else: st.warning("Données insuf.")
+    else: st.warning("Données requises.")
 
 st.sidebar.markdown("---")
-if st.sidebar.button("Injecter Données Test V35"):
+if st.sidebar.button("Injecter Données Test V36"):
     new_data = []
     dates = [datetime.date.today() - datetime.timedelta(days=x) for x in range(60)]
     for _ in range(200):
@@ -246,20 +254,20 @@ if st.sidebar.button("Injecter Données Test V35"):
             r = np.random.normal(t, 10)
             entry.update({'strat_dist': t, 'distance': r, 'score_lateral': np.random.randint(0,3), 'type_coup': 'Jeu Long'})
         add_coup_to_db(entry)
-    
+    st.session_state['coups'] = load_coups_from_db().to_dict('records')
     st.sidebar.success("Données injectées !")
-    st.rerun() # REFRESH IMMEDIAT
+    st.rerun()
 
 if st.session_state['coups']:
     df_ex = pd.DataFrame(st.session_state['coups'])
-    st.sidebar.download_button("📥 Backup CSV", convert_df(df_ex), "golf_v35_backup.csv", "text/csv")
+    st.sidebar.download_button("📥 Backup CSV", convert_df(df_ex), "golf_v36_backup.csv", "text/csv")
 
 if st.sidebar.button("⚠️ Vider DB"):
     conn.execute("DELETE FROM coups"); conn.execute("DELETE FROM parties"); conn.commit()
     st.session_state['coups'] = []; st.session_state['parties'] = []; st.rerun()
 
 # --- INTERFACE ---
-st.title("🏌️‍♂️ GolfShot 35.0 : Live Sync & PDF")
+st.title("🏌️‍♂️ GolfShot 36.0 : Complete DNA")
 
 tab_parcours, tab_practice, tab_combine, tab_dna, tab_sac, tab_putt = st.tabs([
     "⛳ Parcours", "🚜 Practice", "🏆 Combine", "🧬 Club DNA", "🎒 Mapping", "🟢 Putting"
@@ -342,14 +350,21 @@ with tab_parcours:
                 'points_test': 0, 'amplitude': 'Plein', 'contact': 'Bon', 'dist_remain': 0
             }
             add_coup_to_db(data)
+            st.session_state['coups'].append(data)
             
             st.session_state['shots_on_current_hole'] += 1
             if club == "Putter": st.session_state['putts_on_current_hole'] += 1
-            st.session_state['current_card'].at[idx_hole, 'Score'] = st.session_state['shots_on_current_hole']
-            st.session_state['current_card'].at[idx_hole, 'Putts'] = st.session_state['putts_on_current_hole']
+            idx = st.session_state['current_hole'] - 1
+            st.session_state['current_card'].at[idx, 'Score'] = st.session_state['shots_on_current_hole']
+            st.session_state['current_card'].at[idx, 'Putts'] = st.session_state['putts_on_current_hole']
             
-            st.success("Sauvegardé !")
-            st.rerun() # REFRESH IMMEDIAT POUR GRAPHS
+            if res_putt == "Dans le trou":
+                st.balloons()
+                st.session_state['shots_on_current_hole'] = 0
+                st.session_state['putts_on_current_hole'] = 0
+                if st.session_state['current_hole'] < 18: st.session_state['current_hole'] += 1
+                st.rerun()
+            else: st.success("Sauvegardé !")
 
         c_p, c_n = st.columns(2)
         if c_p.button("<< Préc"):
@@ -372,8 +387,8 @@ with tab_parcours:
         if st.button("💾 Sauvegarder Partie"):
             p_data = {'date': str(datetime.date.today()), 'score': int(tot), 'putts': int(played['Putts'].sum())}
             add_partie_to_db(p_data)
+            st.session_state['parties'].append(p_data)
             st.success("Partie archivée !")
-            st.rerun()
 
 # ==================================================
 # ONGLET 2 : PRACTICE
@@ -404,6 +419,7 @@ with tab_practice:
             'par_trou': 0, 'points_test': 0, 'amplitude': 'Plein', 'dist_remain': 0
         }
         add_coup_to_db(data)
+        st.session_state['coups'].append(data)
         st.success("Sauvegardé !")
         st.rerun()
 
@@ -437,6 +453,7 @@ with tab_combine:
                 'strat_effet': 'N/A', 'real_effet': 'N/A', 'amplitude': 'Plein', 'contact': 'Bon', 'dist_remain': 0, 'err_longueur': 'Ok'
             }
             add_coup_to_db(data)
+            st.session_state['coups'].append(data)
             stt['score_total'] += pts
             if stt['current_shot'] < 5: stt['current_shot'] += 1
             else: 
@@ -456,7 +473,7 @@ with tab_combine:
             st.metric("Score Moyen", f"{df_c['points_test'].mean():.0f}/100")
 
 # ==================================================
-# ANALYSES (UTILISENT df_analysis FILTRÉ)
+# ANALYSES
 # ==================================================
 with tab_dna:
     st.header("🧬 Club DNA")
@@ -470,10 +487,26 @@ with tab_dna:
                 fig, ax = plt.subplots()
                 plot_dispersion_analysis(ax, sub[sub['mode']=='Practice'], "Practice", "blue")
                 st.pyplot(fig)
+                # --- CORRECTION V36 : METRIQUES PRACTICE ---
+                if not sub[sub['mode']=='Practice'].empty:
+                    st.metric("Dispersion Profondeur", f"± {sub[sub['mode']=='Practice']['distance'].std():.1f}m")
+                    st.metric("Score Latéral Moyen", f"{sub[sub['mode']=='Practice']['score_lateral'].mean():.1f} / 5")
+
             with c2:
                 fig, ax = plt.subplots()
                 plot_dispersion_analysis(ax, sub[sub['mode']=='Parcours'], "Parcours", "red")
                 st.pyplot(fig)
+                # --- CORRECTION V36 : METRIQUES PARCOURS ---
+                if not sub[sub['mode']=='Parcours'].empty:
+                    st.metric("Dispersion Profondeur", f"± {sub[sub['mode']=='Parcours']['distance'].std():.1f}m")
+                    st.metric("Score Latéral Moyen", f"{sub[sub['mode']=='Parcours']['score_lateral'].mean():.1f} / 5")
+            
+            st.subheader("Effets")
+            df_eff = sub[sub['strat_effet'].isin(["Fade", "Draw", "Tout droit"])]
+            if not df_eff.empty:
+                df_eff['OK'] = df_eff.apply(lambda x: 1 if x['strat_effet'] in x['real_effet'] else 0, axis=1)
+                res = df_eff.groupby('strat_effet')['OK'].mean() * 100
+                st.dataframe(res.to_frame("% Réussite").style.background_gradient(cmap="Greens"), use_container_width=True)
 
 with tab_sac:
     st.header("🎒 Mapping")
